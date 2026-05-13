@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cp .env.example .env)",
+      "Bash(docker --version)",
+      "Bash(docker compose *)"
+    ]
+  }
+}

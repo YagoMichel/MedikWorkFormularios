@@ -1,0 +1,668 @@
+{
+  "name": "Mediwork Agent - WhatsApp",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "whatsapp",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "d2f90cc6-6d37-42b8-b1d8-bf0087ba9cbb",
+      "name": "Webhook GET (verify)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        200
+      ],
+      "webhookId": "875e6d4f-b249-4fc5-9ed3-2004dcdbeb93"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.query[\"hub.verify_token\"] === $env.WHATSAPP_VERIFY_TOKEN ? $json.query[\"hub.challenge\"] : \"\" }}",
+        "options": {
+          "responseCode": "={{ $json.query[\"hub.verify_token\"] === $env.WHATSAPP_VERIFY_TOKEN ? 200 : 403 }}"
+        }
+      },
+      "id": "e25440d7-cfbf-4655-9528-8d32328612df",
+      "name": "Verify Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        520,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a9439e3c-1675-4a1b-b602-8957d162da1c",
+      "name": "Webhook POST (messages)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        480
+      ],
+      "webhookId": "a8f4f06e-ffff-492f-b0de-bca637ff4e03"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "EVENT_RECEIVED",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "2a937cf2-72c1-4912-832f-61b433b85272",
+      "name": "Ack 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        520,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extrae mensaje de texto del payload de WhatsApp Cloud API\nconst body = $input.first().json.body;\nconst entries = body?.entry || [];\nfor (const entry of entries) {\n  const changes = entry.changes || [];\n  for (const change of changes) {\n    const value = change.value || {};\n    const messages = value.messages || [];\n    const contacts = value.contacts || [];\n    for (const msg of messages) {\n      if (msg.type !== 'text') {\n        return [{ json: {\n          skip: true,\n          from: msg.from,\n          unsupported_type: msg.type,\n        }}];\n      }\n      const contact = contacts.find(c => c.wa_id === msg.from);\n      return [{ json: {\n        skip: false,\n        from: msg.from,\n        sessionId: msg.from,\n        text: msg.text?.body || '',\n        contactName: contact?.profile?.name || '',\n        messageId: msg.id,\n        timestamp: msg.timestamp,\n      }}];\n    }\n  }\n}\nreturn [{ json: { skip: true, reason: 'no_message' } }];"
+      },
+      "id": "5cb1702e-7158-484c-af0f-c7ea737c9b1c",
+      "name": "Parse WhatsApp Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "a95597fb-e117-427f-bf10-5a93365f06b5",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "597a1c60-5989-4485-bcf3-4ee4d1b413a5",
+      "name": "Es texto?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1080,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.text }}",
+        "options": {
+          "systemMessage": "Eres el asistente virtual de una clinica visual / optometrica.\n\nTu rol: ayudar a responsables de RRHH de empresas convenio a agendar JORNADAS DE REVISION VISUAL para sus trabajadores. Todos los trabajadores de una jornada acuden el MISMO DIA.\n\n# CONTEXTO DE LA CLINICA\nSi el usuario pregunta horarios, ubicacion o requisitos, llama a la herramienta info_clinica con el tema apropiado.\n\n# REGLAS CRITICAS\n1. NUNCA inventes datos. Usa siempre las herramientas para verificar empresas, cupos, batches.\n2. NO confirmes una jornada hasta tener: empresa, fecha, contacto y al menos 1 trabajador con nombre completo.\n3. Si la fecha solicitada no tiene cupo, usa consultar_disponibilidad para proponer alternativas.\n4. NO mezcles trabajadores de empresas distintas en el mismo batch.\n5. Si pegan lista de trabajadores en formato libre, parseala y CONFIRMA el conteo antes de cerrar.\n6. Si piden algo fuera de tu alcance (cancelar cita individual, ver historial clinico, vender productos), avisa que esos casos los atiende personal de la clinica.\n\n# FLUJO TIPICO\n1. Saludo: pregunta a que empresa representa el contacto.\n2. Llama a buscar_empresa. Si no existe, pide datos y llama a registrar_empresa.\n3. Pregunta cuantos trabajadores y que fecha quieren.\n4. Llama a consultar_disponibilidad. Si la fecha no aplica, propone alternativas.\n5. Llama a crear_batch en estado BORRADOR.\n6. Pide la lista de trabajadores. Necesitas al menos: nombre completo. Idealmente: fecha de nacimiento, NSS, telefono.\n7. Llama a agregar_trabajadores con el array completo. Confirma el conteo.\n8. Muestra resumen (empresa, fecha, primeros 3 trabajadores + total) y pide confirmacion explicita.\n9. Cuando el usuario diga \"confirmo\" o \"si\", llama a confirmar_batch.\n\n# ESTILO\n- Espanol de Mexico, profesional y cordial pero breve.\n- Sin emojis. Mensajes cortos.\n- Cuando el usuario te de informacion, repitela brevemente para confirmar.\n\n# QUE NO HACER\n- No prometas fechas sin verificar cupo.\n- No agendes citas individuales (eso es flujo manual).\n- No respondas preguntas medicas; reenvia al doctor.",
+          "maxIterations": 8
+        }
+      },
+      "id": "656a9838-eb8c-496e-9de8-34af68e2b39d",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        1360,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "model": "claude-sonnet-4-5",
+        "options": {
+          "maxTokensToSample": 1024,
+          "temperature": 0.3
+        }
+      },
+      "id": "6d1cc394-4753-40bf-8ef4-fcadebca4630",
+      "name": "Claude Sonnet 4.5",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [
+        1240,
+        600
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "REPLACE_WITH_ANTHROPIC_CRED_ID",
+          "name": "Anthropic API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $(\"Parse WhatsApp Payload\").item.json.sessionId }}",
+        "contextWindowLength": 30
+      },
+      "id": "e12bfa2e-3410-415d-8555-368b09b95ce5",
+      "name": "Window Buffer Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        1380,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Devuelve informacion general de la clinica: ubicacion, horarios, telefono o requisitos. Usar cuando el usuario pregunte info general.",
+        "method": "GET",
+        "url": "http://backend:4000/api/agent/info",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "{ \"tema\": \"{{ $fromAI(\\\"tema\\\", \\\"Tema: ubicacion, horarios, requisitos, estacionamiento o general\\\", \\\"string\\\") }}\" }",
+        "options": {}
+      },
+      "id": "01b16601-b4d8-441a-9019-6d269e0fa4a8",
+      "name": "info_clinica",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1640,
+        100
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_JWT_CRED_ID",
+          "name": "Mediwork Service JWT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Busca una empresa convenio por nombre (busqueda parcial, case-insensitive). Devuelve datos si existe, o encontrada=false si no.",
+        "method": "POST",
+        "url": "http://backend:4000/api/agent/companies/find",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{ \"nombre\": \"{{ $fromAI(\\\"nombre\\\", \\\"Nombre o parte del nombre de la empresa\\\", \\\"string\\\") }}\" }",
+        "contentType": "json",
+        "options": {}
+      },
+      "id": "063daf5a-20c8-42a7-8b27-0b39375650d9",
+      "name": "buscar_empresa",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1640,
+        220
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_JWT_CRED_ID",
+          "name": "Mediwork Service JWT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Registra una nueva empresa convenio. Usar SOLO si la empresa no existe (verifica primero con buscar_empresa).",
+        "method": "POST",
+        "url": "http://backend:4000/api/agent/companies",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"nombre\": \"{{ $fromAI(\"nombre\", \"Nombre legal de la empresa\", \"string\") }}\",\n  \"contactName\": \"{{ $fromAI(\"contactName\", \"Nombre del contacto en RRHH\", \"string\") }}\",\n  \"phone\": \"{{ $fromAI(\"phone\", \"Telefono del contacto\", \"string\") }}\",\n  \"email\": \"{{ $fromAI(\"email\", \"Email del contacto, opcional\", \"string\") }}\"\n}",
+        "contentType": "json",
+        "options": {}
+      },
+      "id": "5aaff977-2ed0-4846-a1dd-8b3af0bf86a5",
+      "name": "registrar_empresa",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1640,
+        340
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_JWT_CRED_ID",
+          "name": "Mediwork Service JWT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Devuelve dias con cupo disponible en un rango de fechas. Maximo 20 pacientes por dia. Usa formato YYYY-MM-DD.",
+        "method": "GET",
+        "url": "http://backend:4000/api/agent/capacity",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "{\n  \"from\": \"{{ $fromAI(\"from\", \"Fecha inicio YYYY-MM-DD\", \"string\") }}\",\n  \"to\": \"{{ $fromAI(\"to\", \"Fecha fin YYYY-MM-DD\", \"string\") }}\",\n  \"required\": \"{{ $fromAI(\"required\", \"Cantidad de trabajadores requerida\", \"number\") }}\"\n}",
+        "options": {}
+      },
+      "id": "c0042d13-87b5-42ec-bddc-977ae59b9826",
+      "name": "consultar_disponibilidad",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1640,
+        460
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_JWT_CRED_ID",
+          "name": "Mediwork Service JWT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Crea una jornada empresarial en estado BORRADOR. Despues se le agregan trabajadores y al final se confirma. NO genera citas todavia.",
+        "method": "POST",
+        "url": "http://backend:4000/api/agent/batches",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"empresa_id\": \"{{ $fromAI(\"empresa_id\", \"ID de la empresa (obtenido de buscar_empresa o registrar_empresa)\", \"string\") }}\",\n  \"fecha\": \"{{ $fromAI(\"fecha\", \"Fecha de la jornada YYYY-MM-DD\", \"string\") }}\",\n  \"expected_count\": {{ $fromAI(\"expected_count\", \"Numero estimado de trabajadores (1 a 20)\", \"number\") }},\n  \"contacto_nombre\": \"{{ $fromAI(\"contacto_nombre\", \"Nombre de la persona contacto en RRHH\", \"string\") }}\",\n  \"contacto_telefono\": \"{{ $fromAI(\"contacto_telefono\", \"Telefono del contacto\", \"string\") }}\",\n  \"sessionId\": \"{{ $('Parse WhatsApp Payload').item.json.sessionId }}\"\n}",
+        "contentType": "json",
+        "options": {}
+      },
+      "id": "1df93056-b6af-4ec4-9c82-a82c63be679e",
+      "name": "crear_batch",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1640,
+        580
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_JWT_CRED_ID",
+          "name": "Mediwork Service JWT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Agrega trabajadores al batch. Crea pacientes nuevos si no existen y genera citas en estado AGENDADA. trabajadores es array; cada item: {nombre_completo: string (REQUERIDO), fecha_nacimiento?: YYYY-MM-DD, nss?: string, telefono?: string, genero?: M|F|O}.",
+        "method": "POST",
+        "url": "http://backend:4000/api/agent/batches/{{ $fromAI(\"batch_id\", \"ID del batch creado con crear_batch\", \"string\") }}/workers",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"trabajadores\": {{ $fromAI(\"trabajadores\", \"Array JSON de trabajadores. Cada uno objeto con nombre_completo (string, requerido) y opcional fecha_nacimiento (YYYY-MM-DD), nss, telefono, genero (M|F|O)\", \"json\") }}\n}",
+        "contentType": "json",
+        "options": {}
+      },
+      "id": "f0fdf351-9e09-49c5-b61e-7ca67ba51488",
+      "name": "agregar_trabajadores",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1640,
+        700
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_JWT_CRED_ID",
+          "name": "Mediwork Service JWT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Cierra el batch en estado CONFIRMADO. Solo usar despues de confirmacion explicita del usuario (cuando responde 'confirmo' o 'si'). Verifica que haya al menos 1 trabajador.",
+        "method": "POST",
+        "url": "http://backend:4000/api/agent/batches/{{ $fromAI(\"batch_id\", \"ID del batch a confirmar\", \"string\") }}/confirm",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{}",
+        "contentType": "json",
+        "options": {}
+      },
+      "id": "ca9426a5-09f6-4f01-b8af-85afffc383fa",
+      "name": "confirmar_batch",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1640,
+        820
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_JWT_CRED_ID",
+          "name": "Mediwork Service JWT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Devuelve el detalle de un batch (empresa, fecha, lista de trabajadores) para mostrar resumen al usuario antes de confirmar.",
+        "method": "GET",
+        "url": "http://backend:4000/api/agent/batches/{{ $fromAI(\"batch_id\", \"ID del batch\", \"string\") }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "a1b5be93-211f-4a2c-a787-c74e5416f946",
+      "name": "consultar_batch",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1640,
+        940
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_JWT_CRED_ID",
+          "name": "Mediwork Service JWT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "Cancela un batch (no lo borra, lo marca como CANCELADO). Usar si el usuario decide no continuar.",
+        "method": "POST",
+        "url": "http://backend:4000/api/agent/batches/{{ $fromAI(\"batch_id\", \"ID del batch\", \"string\") }}/cancel",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{ \"motivo\": \"{{ $fromAI(\\\"motivo\\\", \\\"Razon de cancelacion\\\", \\\"string\\\") }}\" }",
+        "contentType": "json",
+        "options": {}
+      },
+      "id": "95374b92-779c-4f68-910e-6fd4c6789661",
+      "name": "cancelar_batch",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1640,
+        1060
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_WITH_JWT_CRED_ID",
+          "name": "Mediwork Service JWT"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "={{ $env.WHATSAPP_PHONE_NUMBER_ID }}",
+        "recipientPhoneNumber": "={{ $(\"Parse WhatsApp Payload\").item.json.from }}",
+        "textBody": "={{ $json.output }}",
+        "additionalFields": {}
+      },
+      "id": "142af946-4367-409a-8330-b8eb856a9111",
+      "name": "Enviar WhatsApp",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [
+        1920,
+        380
+      ],
+      "credentials": {
+        "whatsAppApi": {
+          "id": "REPLACE_WITH_WA_CRED_ID",
+          "name": "WhatsApp Cloud API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "phoneNumberId": "={{ $env.WHATSAPP_PHONE_NUMBER_ID }}",
+        "recipientPhoneNumber": "={{ $json.from }}",
+        "textBody": "Por ahora solo proceso mensajes de texto. Por favor escribe tu solicitud.",
+        "additionalFields": {}
+      },
+      "id": "1120f1ef-00c6-46aa-9665-b42c086a47db",
+      "name": "Aviso Tipo No Soportado",
+      "type": "n8n-nodes-base.whatsApp",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        700
+      ],
+      "credentials": {
+        "whatsAppApi": {
+          "id": "REPLACE_WITH_WA_CRED_ID",
+          "name": "WhatsApp Cloud API"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook GET (verify)": {
+      "main": [
+        [
+          {
+            "node": "Verify Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook POST (messages)": {
+      "main": [
+        [
+          {
+            "node": "Ack 200",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Parse WhatsApp Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse WhatsApp Payload": {
+      "main": [
+        [
+          {
+            "node": "Es texto?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Es texto?": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Aviso Tipo No Soportado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Enviar WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude Sonnet 4.5": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Window Buffer Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "info_clinica": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "buscar_empresa": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "registrar_empresa": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "consultar_disponibilidad": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "crear_batch": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "agregar_trabajadores": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "confirmar_batch": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "consultar_batch": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "cancelar_batch": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "pinData": {},
+  "versionId": "aaf36b97-d4ce-44c0-a53f-2ea3d47e2d86",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "0aea0c9b-7751-4f25-8a70-d407d58b6739"
+}

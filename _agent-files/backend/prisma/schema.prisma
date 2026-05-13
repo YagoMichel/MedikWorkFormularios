@@ -1,0 +1,313 @@
+// Prisma schema - Mediwork + soporte para agente n8n
+// REEMPLAZA al schema.prisma actual de backend/prisma/
+// CAMBIOS vs original:
+//   - Role: agregado AGENT (usuario de servicio para n8n)
+//   - AppointmentType: agregado EMPRESARIAL
+//   - AppointmentSource: nuevo enum (MANUAL | AGENT)
+//   - BatchStatus: nuevo enum
+//   - Patient: agregado companyId (FK opcional a Company)
+//   - Appointment: agregado batchId (FK opcional) y source
+//   - DayCapacity: nuevo modelo (cupo por dia)
+//   - CompanyBatch: nuevo modelo (jornada empresarial)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  DOCTOR
+  AGENT
+}
+
+enum AppointmentStatus {
+  AGENDADA
+  CONFIRMADA
+  EN_CONSULTA
+  ATENDIDA
+  CANCELADA
+  NO_ASISTIO
+}
+
+enum AppointmentType {
+  PRIMERA_VEZ
+  SEGUIMIENTO
+  REVISION_LENTES
+  URGENCIA
+  EMPRESARIAL
+}
+
+enum AppointmentSource {
+  MANUAL
+  AGENT
+}
+
+enum PrescriptionType {
+  LEJOS
+  CERCA
+  BIFOCAL
+  PROGRESIVO
+}
+
+enum PrescriptionStatus {
+  ACTIVA
+  VENCIDA
+  USADA
+}
+
+enum MovementType {
+  ENTRADA
+  SALIDA
+  AJUSTE
+}
+
+enum SaleStatus {
+  PAGADA
+  PENDIENTE_ENTREGA
+  ENTREGADA
+  CANCELADA
+}
+
+enum PaymentMethod {
+  EFECTIVO
+  TARJETA
+  TRANSFERENCIA
+  COMBINADO
+}
+
+enum BatchStatus {
+  BORRADOR
+  CONFIRMADO
+  EN_PROCESO
+  CERRADO
+  CANCELADO
+}
+
+model User {
+  id             String         @id @default(cuid())
+  email          String         @unique
+  passwordHash   String
+  fullName       String
+  role           Role
+  active         Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  appointments   Appointment[]  @relation("DoctorAppointments")
+  prescriptions  Prescription[] @relation("DoctorPrescriptions")
+  sales          Sale[]         @relation("VendorSales")
+  movements      Movement[]
+}
+
+model Patient {
+  id             String         @id @default(cuid())
+  fullName       String
+  birthDate      DateTime?
+  gender         String?
+  phone          String?
+  email          String?
+  address        String?
+  nss            String?
+  // Texto libre legacy (se conserva para retrocompatibilidad)
+  company        String?
+  // FK canonica
+  companyId      String?
+  companyRel     Company?       @relation(fields: [companyId], references: [id])
+  medicalNotes   String?
+  photoUrl       String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  appointments   Appointment[]
+  prescriptions  Prescription[]
+  sales          Sale[]
+
+  @@index([companyId])
+  @@index([nss])
+}
+
+model Appointment {
+  id              String            @id @default(cuid())
+  patientId       String
+  patient         Patient           @relation(fields: [patientId], references: [id])
+  doctorId        String
+  doctor          User              @relation("DoctorAppointments", fields: [doctorId], references: [id])
+  date            DateTime
+  durationMin     Int               @default(30)
+  type            AppointmentType   @default(PRIMERA_VEZ)
+  status          AppointmentStatus @default(AGENDADA)
+  source          AppointmentSource @default(MANUAL)
+  batchId         String?
+  batch           CompanyBatch?     @relation(fields: [batchId], references: [id])
+  color           String?
+  preNotes        String?
+  postNotes       String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([date])
+  @@index([batchId])
+}
+
+model Prescription {
+  id          String             @id @default(cuid())
+  patientId   String
+  patient     Patient            @relation(fields: [patientId], references: [id])
+  doctorId    String
+  doctor      User               @relation("DoctorPrescriptions", fields: [doctorId], references: [id])
+  issuedAt    DateTime           @default(now())
+  expiresAt   DateTime
+  odSph       Float?
+  odCyl       Float?
+  odAxis      Float?
+  odAdd       Float?
+  oiSph       Float?
+  oiCyl       Float?
+  oiAxis      Float?
+  oiAdd       Float?
+  dpOd        Float?
+  dpOi        Float?
+  dpBin       Float?
+  type        PrescriptionType   @default(LEJOS)
+  diagnosis   String?
+  recommendations String?
+  status      PrescriptionStatus @default(ACTIVA)
+  imageUrl    String?
+  sales       Sale[]
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+}
+
+model Company {
+  id          String         @id @default(cuid())
+  name        String         @unique
+  contactName String?
+  phone       String?
+  email       String?
+  address     String?
+  notes       String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  patients    Patient[]
+  batches     CompanyBatch[]
+}
+
+model Category {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  parentId  String?
+  parent    Category? @relation("Sub", fields: [parentId], references: [id])
+  children  Category[] @relation("Sub")
+  products  Product[]
+}
+
+model Product {
+  id            String      @id @default(cuid())
+  sku           String      @unique
+  name          String
+  description   String?
+  categoryId    String
+  category      Category    @relation(fields: [categoryId], references: [id])
+  brand         String?
+  costPrice     Float       @default(0)
+  salePrice     Float       @default(0)
+  stock         Int         @default(0)
+  minStock      Int         @default(0)
+  attributes    Json?
+  imageUrl      String?
+  supplier      String?
+  lastMovementAt DateTime?
+  active        Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  movements     Movement[]
+  saleItems     SaleItem[]
+}
+
+model Movement {
+  id          String        @id @default(cuid())
+  type        MovementType
+  productId   String
+  product     Product       @relation(fields: [productId], references: [id])
+  quantity    Int
+  unitCost    Float?
+  reason      String?
+  reference   String?
+  userId      String
+  user        User          @relation(fields: [userId], references: [id])
+  createdAt   DateTime      @default(now())
+}
+
+model Sale {
+  id              String        @id @default(cuid())
+  folio           String        @unique
+  patientId       String?
+  patient         Patient?      @relation(fields: [patientId], references: [id])
+  prescriptionId  String?
+  prescription    Prescription? @relation(fields: [prescriptionId], references: [id])
+  vendorId        String
+  vendor          User          @relation("VendorSales", fields: [vendorId], references: [id])
+  items           SaleItem[]
+  subtotal        Float         @default(0)
+  discount        Float         @default(0)
+  tax             Float         @default(0)
+  total           Float         @default(0)
+  paymentMethod   PaymentMethod @default(EFECTIVO)
+  status          SaleStatus    @default(PAGADA)
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model SaleItem {
+  id          String   @id @default(cuid())
+  saleId      String
+  sale        Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  quantity    Int
+  unitPrice   Float
+  discount    Float    @default(0)
+  subtotal    Float
+}
+
+// =========================================================
+// MODELOS NUEVOS PARA AGENTE
+// =========================================================
+
+/// Cupo de pacientes por dia. Si no existe registro, se usa default 20.
+model DayCapacity {
+  id           String   @id @default(cuid())
+  date         DateTime @unique
+  maxPatients  Int      @default(20)
+  blocked      Boolean  @default(false)
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+/// Jornada empresarial: bloque de citas del mismo dia para una empresa.
+model CompanyBatch {
+  id              String         @id @default(cuid())
+  companyId       String
+  company         Company        @relation(fields: [companyId], references: [id])
+  date            DateTime
+  expectedCount   Int            @default(0)
+  status          BatchStatus    @default(BORRADOR)
+  contactName     String?
+  contactPhone    String?
+  contactEmail    String?
+  notes           String?
+  // sessionId de n8n (wa_id) que origino el batch, opcional
+  sessionId       String?
+  appointments    Appointment[]
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([companyId])
+  @@index([date])
+  @@index([status])
+}
