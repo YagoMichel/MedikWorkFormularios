@@ -1,3 +1,9 @@
+// =============================================================
+// ARCHIVO: src/pages/doctor/Dashboard.tsx
+// SECCION: DOCTOR (tuyo)
+// DESCRIPCION: Dashboard del doctor. Muestra resumen del dia:
+//              citas pendientes, pacientes atendidos, alertas.
+// =============================================================
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../services/api';
 import { useAuth } from '../../stores/auth';

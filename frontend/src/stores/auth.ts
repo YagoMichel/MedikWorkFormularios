@@ -1,7 +1,27 @@
+// =============================================================
+// ARCHIVO: src/stores/auth.ts
+// DESCRIPCION: Estado global de autenticacion (Zustand).
+//              Guarda el usuario y token en localStorage
+//              para que la sesion persista al recargar.
+//
+// ROLES DISPONIBLES:
+//   ADMIN   → acceso completo (compañero)
+//   DOCTOR  → agenda, pacientes, recetas (tu)
+//   PACIENTE→ solo encuesta tablet (tu)
+//
+// USO: const { user, logout } = useAuth();
+// =============================================================
+
 import { create } from 'zustand';
 
 export type Role = 'ADMIN' | 'DOCTOR' | 'PACIENTE';
-export interface User { id: string; email: string; fullName: string; role: Role; }
+
+export interface User {
+  id: string;
+  email: string;
+  fullName: string;
+  role: Role;
+}
 
 interface AuthStore {
   user: User | null;
@@ -10,17 +30,22 @@ interface AuthStore {
   logout: () => void;
 }
 
+// Recupera sesion guardada al recargar la pagina
 const stored = localStorage.getItem('user');
 const initialUser = stored ? JSON.parse(stored) : null;
 
 export const useAuth = create<AuthStore>((set) => ({
-  user: initialUser,
+  user:  initialUser,
   token: localStorage.getItem('token'),
+
+  // Guarda token y usuario tras login exitoso
   setAuth: (token, user) => {
     localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(user));
     set({ token, user });
   },
+
+  // Limpia sesion al cerrar sesion
   logout: () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');

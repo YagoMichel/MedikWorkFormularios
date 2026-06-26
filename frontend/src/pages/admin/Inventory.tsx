@@ -1,3 +1,10 @@
+// =============================================================
+// ARCHIVO: src/pages/admin/Inventory.tsx
+// SECCION: ADMIN (compañero)
+// DESCRIPCION: Gestion de inventario de productos (lentes, armazones, etc).
+//              Permite ver stock, agregar productos y subir imagen.
+// API: GET/POST/PUT/DELETE /api/inventory
+// =============================================================
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../services/api';
 import { useState, useRef } from 'react';
@@ -131,7 +138,7 @@ export default function Inventory() {
         </div>
       </div>
 
-      {open && <ProductForm initial={editing} categories={categories} extraCols={extraCols} onClose={() => { setOpen(false); setEditing(null); }} onSubmit={(d) => save.mutate(d)} />}
+      {open && <ProductForm initial={editing} categories={categories} extraCols={extraCols} onClose={() => { setOpen(false); setEditing(null); }} onSubmit={(d: any) => save.mutate(d)} />}
 
       {confirmDelete && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">

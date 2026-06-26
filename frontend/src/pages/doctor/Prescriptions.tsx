@@ -1,3 +1,9 @@
+// =============================================================
+// ARCHIVO: src/pages/doctor/Prescriptions.tsx
+// SECCION: DOCTOR (tuyo)
+// DESCRIPCION: Lista de recetas medicas del doctor.
+//              Permite ver y crear recetas para pacientes.
+// =============================================================
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../services/api';
 import { Link } from 'react-router-dom';

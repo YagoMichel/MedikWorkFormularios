@@ -15,6 +15,11 @@ async function main() {
     update: {},
     create: { email: 'doctor1@clinica.com', fullName: 'Dra. Ana Pérez', role: 'DOCTOR', passwordHash: await hash('Doctor1234!') },
   });
+  await prisma.user.upsert({
+    where: { email: 'paciente@clinica.com' },
+    update: {},
+    create: { email: 'paciente@clinica.com', fullName: 'Tablet Kiosk', role: 'PACIENTE', passwordHash: await hash('Paciente1234!') },
+  });
   console.log('Listo.');
 }
 

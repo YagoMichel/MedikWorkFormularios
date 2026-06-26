@@ -48,7 +48,7 @@ export default function SalesView({ darkAdmin = false }: { darkAdmin?: boolean }
         </table>
       </div>
 
-      {showForm && <SaleForm onClose={() => setShowForm(false)} onSubmit={(d) => create.mutate(d)} />}
+      {showForm && <SaleForm onClose={() => setShowForm(false)} onSubmit={(d: any) => create.mutate(d)} />}
     </div>
   );
 }

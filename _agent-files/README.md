@@ -1,6 +1,6 @@
 # Mediwork + Agente n8n
 
-Agente conversacional de WhatsApp que automatiza el agendado de jornadas empresariales en la clínica visual. Construido con n8n auto-hospedado y Claude (tool calling) llamando a la API de Mediwork.
+Agente conversacional de WhatsApp que automatiza el agendado de citas de empresa en la clínica visual. Construido con n8n auto-hospedado y Claude (tool calling) llamando a la API de Mediwork.
 
 ## Arquitectura
 

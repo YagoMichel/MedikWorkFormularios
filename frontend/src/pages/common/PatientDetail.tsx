@@ -1,3 +1,12 @@
+// =============================================================
+// ARCHIVO: src/pages/shared/PatientDetail.tsx
+// SECCION: COMPARTIDA (ADMIN + DOCTOR)
+// DESCRIPCION: Ficha completa del paciente.
+//              Muestra datos personales, historial de citas,
+//              recetas, encuestas y examenes medicos.
+// RUTA: /patients/:id
+// API: GET /api/patients/:id
+// =============================================================
 import { useParams, Link } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -368,7 +377,7 @@ const PATOLOGICOS = ['Diabetes','Hipertensión','Cardiopatía','Cáncer','Epilep
 function buildInitialSurvey(survey: any, patientName: string, patientCompany: string) {
   return {
     empresa: patientCompany || '', tipoExamen: '', otroTipo: '', actividades: '',
-    nombre: patientName || '', edad: '', tipoSangre: '', puestoDeTrabajo: '',
+    nombre: patientName || '', tipoSangre: '', puestoDeTrabajo: '',
     celular: '', nss: '', fechaNacimiento: '', escolaridad: '', estadoCivil: '',
     lugarNacimiento: '', correo: '',
     calle: '', numero: '', colonia: '', municipio: '', cp: '',
@@ -379,11 +388,7 @@ function buildInitialSurvey(survey: any, patientName: string, patientCompany: st
     consumeDrogas: 'NO_NUNCA', cualDroga: '', frecuenciaDroga: '', tiempoDroga: '', ultimaVezDroga: '',
     esquemaVacunacion: false, dosisAnticovid: '', marcaVacuna: '',
     tieneTatuajes: false, ultimoTatuaje: '', usaAudifonos: false,
-    antecedentesFamiliares: ENFERMEDADES_FAM.map((e) => ({ enfermedad: e, si: false, quien: '' })),
     edadInicioLaboral: '', trabajoMinas: '',
-    exposiciones: { ruidos: false, polvos: false, vapores: false, humos: false, riesgoElectrico: false, usaEpp: false },
-    historialEmpleos: [{ empresa: '', cargo: '', tiempo: '', exponentes: '' }],
-    antecedentesPatologicos: PATOLOGICOS.map((c) => ({ condicion: c, si: false, especifique: '' })),
     ...(survey || {}),
     edad: survey?.edad != null ? String(survey.edad) : '',
     antecedentesFamiliares: survey?.antecedentesFamiliares?.length

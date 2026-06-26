@@ -1,3 +1,14 @@
+// =============================================================
+// ARCHIVO: src/components/layout/MainLayout.tsx
+// DESCRIPCION: Layout principal con sidebar de navegacion.
+//              Usado por ADMIN y DOCTOR.
+//              El sidebar muestra links distintos segun el rol.
+//
+// SIDEBAR ADMIN  → Dashboard, Inventario, Empresas, Usuarios,
+//                  Citas, Calendario, Reportes
+// SIDEBAR DOCTOR → Dashboard, Agenda, Pacientes
+// =============================================================
+
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../stores/auth';
 import { useTheme } from '../../stores/theme.tsx';
@@ -17,8 +28,9 @@ export default function MainLayout() {
     { to: '/inventory', icon: 'inventory_2', label: 'Inventario' },
     { to: '/companies', icon: 'business', label: 'Empresas' },
     { to: '/users', icon: 'manage_accounts', label: 'Usuarios' },
-    { to: '/agent', icon: 'smart_toy', label: 'Agente IA' },
     { to: '/citas', icon: 'calendar_month', label: 'Citas' },
+    { to: '/calendario', icon: 'date_range', label: 'Calendario' },
+    { to: '/reportes', icon: 'bar_chart', label: 'Reportes' },
   ] : [
     { to: '/', icon: 'dashboard', label: 'Dashboard' },
     { to: '/appointments', icon: 'event', label: 'Agenda' },
@@ -28,7 +40,7 @@ export default function MainLayout() {
   const titleMap: Record<string, string> = {
     '/': 'Dashboard', '/patients': 'Pacientes', '/sales': 'Ventas',
     '/appointments': 'Agenda', '/inventory': 'Inventario',
-    '/movements': 'Movimientos', '/users': 'Usuarios', '/prescriptions': 'Recetas', '/agent': 'Agente IA', '/citas': 'Citas',
+    '/movements': 'Movimientos', '/users': 'Usuarios', '/prescriptions': 'Recetas','/citas': 'Citas', '/calendario': 'Calendario', '/reportes': 'Reportes',
   };
   const title = titleMap[loc.pathname] || (loc.pathname.startsWith('/patients/') ? 'Ficha de paciente' : 'Mediwork');
 

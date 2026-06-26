@@ -1,3 +1,10 @@
+// =============================================================
+// ARCHIVO: src/pages/shared/Patients.tsx
+// SECCION: COMPARTIDA (ADMIN + DOCTOR)
+// DESCRIPCION: Lista de pacientes con busqueda y filtros.
+//              Accesible tanto para el doctor como el admin.
+// API: GET /api/patients
+// =============================================================
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../services/api';

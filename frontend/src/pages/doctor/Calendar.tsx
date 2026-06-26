@@ -1,3 +1,10 @@
+// =============================================================
+// ARCHIVO: src/pages/doctor/Calendar.tsx
+// SECCION: DOCTOR (tuyo)
+// DESCRIPCION: Calendario semanal de citas del doctor.
+//              Permite ver, crear y eliminar citas.
+//              El admin tambien puede ver esta vista en solo lectura.
+// =============================================================
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../services/api';
 import { useMemo, useState } from 'react';
@@ -16,7 +23,7 @@ const DOW_LONG  = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','S
 const sameDay = (a: Date, b: Date) =>
   a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 
-export default function Appointments() {
+export default function Calendar() {
   const user = useAuth((s) => s.user);
   const qc = useQueryClient();
   const [selected, setSelected] = useState(() => { const d = new Date(); d.setHours(0,0,0,0); return d; });
@@ -40,7 +47,6 @@ export default function Appointments() {
     onError: () => toast.error('Error al eliminar'),
   });
 
-  // Agrupa citas por día. Las empresariales (batchId) se colapsan en una sola entrada por batch.
   const eventsByDay = useMemo(() => {
     const m = new Map<string, any[]>();
     for (const a of events) {
@@ -61,7 +67,6 @@ export default function Appointments() {
 
   const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 
-  // Semana actual (lunes a domingo)
   const weekStart = useMemo(() => {
     const d = new Date(selected);
     d.setDate(d.getDate() - ((d.getDay() + 6) % 7));

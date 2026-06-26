@@ -1,11 +1,28 @@
-// backend/src/routes/agent.ts
-// Endpoints del agente. Auth: JWT con role AGENT o ADMIN.
+// =============================================================
+// ARCHIVO: src/routes/agent.ts
+// SECCION: API DE INTEGRACION PARA BOT EXTERNO
+// DESCRIPCION: Endpoints que consume el bot de WhatsApp (3er ingeniero)
+//              y la pagina web publica (mediworkzac.com).
+//              Auth: JWT con role AGENT (generar con scripts/create-agent-token.ts)
+//
+// ENDPOINTS DISPONIBLES:
+//   GET  /api/agent/info                    — Datos de la clinica
+//   POST /api/agent/companies/find          — Buscar empresa por nombre
+//   POST /api/agent/companies               — Registrar empresa nueva
+//   GET  /api/agent/capacity                — Dias disponibles en rango
+//   POST /api/agent/agendar                 — Agendar cita (todo en uno)
+//   POST /api/agent/cita-web                — Cita desde formulario web publico
+//   POST /api/agent/batches                 — Crear batch
+//   POST /api/agent/batches/:id/workers     — Agregar trabajadores al batch
+//   POST /api/agent/batches/:id/confirm     — Confirmar batch
+//   POST /api/agent/batches/:id/cancel      — Cancelar batch
+//   GET  /api/agent/batches/:id             — Detalle de batch
+// =============================================================
 
 import { Router } from 'express';
 import { z } from 'zod';
-import { processMessage } from '../services/agentService';
 import { prisma } from '../prisma';
-import { authRequired, requireRole, AuthRequest } from '../middleware/auth';
+import { authRequired, requireRole } from '../middleware/auth';
 import { emit } from '../socket';
 
 const DEFAULT_CAP = parseInt(process.env.DEFAULT_DAILY_CAPACITY || '20', 10);
@@ -49,26 +66,49 @@ router.get('/info', (_req, res) => {
 
 // ============================================================
 // POST /api/agent/companies/find  { nombre }
-// Busca empresa por nombre parcial. Devuelve { encontrada, empresa }
+// Busca empresa por nombre con fuzzy matching (Levenshtein).
+// Devuelve { encontrada, empresas } — usado por el bot de agendamiento.
 // ============================================================
+const normalize = (s: string) =>
+  s.toLowerCase().replace(/\s+/g, '').replace(/[áàä]/g, 'a').replace(/[éèë]/g, 'e')
+   .replace(/[íìï]/g, 'i').replace(/[óòö]/g, 'o').replace(/[úùü]/g, 'u').replace(/ñ/g, 'n');
+
+const levenshtein = (a: string, b: string): number => {
+  const dp = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 0; j <= b.length; j++) dp[0][j] = j;
+  for (let i = 1; i <= a.length; i++)
+    for (let j = 1; j <= b.length; j++)
+      dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+  return dp[a.length][b.length];
+};
+
 const findSchema = z.object({ nombre: z.string().min(1) });
 router.post('/companies/find', async (req, res) => {
   const parsed = findSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-  const empresa = await prisma.company.findFirst({
-    where: { name: { contains: parsed.data.nombre, mode: 'insensitive' } },
+
+  const { nombre } = parsed.data;
+
+  // Estrategia 1: contains exacto (case insensitive)
+  let companies = await prisma.company.findMany({
+    where: { name: { contains: nombre, mode: 'insensitive' } },
+    select: { name: true, phone: true },
   });
-  if (!empresa) return res.json({ encontrada: false });
-  res.json({
-    encontrada: true,
-    empresa: {
-      id: empresa.id,
-      nombre: empresa.name,
-      contacto: empresa.contactName,
-      telefono: empresa.phone,
-      email: empresa.email,
-    },
-  });
+
+  // Estrategia 2: normalizar acentos/espacios y buscar similitud Levenshtein
+  if (companies.length === 0) {
+    const inputNorm = normalize(nombre);
+    const all = await prisma.company.findMany({ select: { name: true, phone: true } });
+    companies = all.filter(c => {
+      const cNorm = normalize(c.name);
+      if (cNorm === inputNorm || cNorm.includes(inputNorm) || inputNorm.includes(cNorm)) return true;
+      const maxLen = Math.max(cNorm.length, inputNorm.length);
+      return levenshtein(cNorm, inputNorm) <= Math.floor(maxLen * 0.2);
+    });
+  }
+
+  if (companies.length === 0) return res.json({ encontrada: false });
+  res.json({ encontrada: true, empresas: companies.slice(0, 3) });
 });
 
 // ============================================================
@@ -217,6 +257,73 @@ router.post('/agendar', async (req, res) => {
     empresa: empresa.name,
     fecha: fechaDate.toISOString().slice(0, 10),
     trabajadores,
+  });
+});
+
+// ============================================================
+// POST /api/agent/cita-web
+// Recibe solicitud de cita desde el formulario de la pagina web publica.
+// Crea Patient + Appointment (status AGENDADA) para revision del personal.
+// Body: { nombre, apellido?, telefono?, correo?, especialidad, tipoConsulta, mensaje?, tipoCliente?, nombreEmpresa? }
+// ============================================================
+const citaWebSchema = z.object({
+  nombre: z.string().min(1),
+  apellido: z.string().optional().default(''),
+  telefono: z.string().optional(),
+  correo: z.string().email().optional().or(z.literal('')),
+  especialidad: z.string().optional(),
+  tipoConsulta: z.string().optional(),
+  mensaje: z.string().optional(),
+  tipoCliente: z.string().optional(),
+  nombreEmpresa: z.string().optional(),
+});
+router.post('/cita-web', async (req, res) => {
+  const parsed = citaWebSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const d = parsed.data;
+
+  const doctor = await prisma.user.findFirst({
+    where: { role: 'DOCTOR', active: true },
+    orderBy: { createdAt: 'asc' },
+  });
+  if (!doctor) return res.status(500).json({ ok: false, error: 'No hay doctores activos' });
+
+  const patient = await prisma.patient.create({
+    data: {
+      fullName: `${d.nombre} ${d.apellido}`.trim(),
+      phone: d.telefono || null,
+      email: d.correo || null,
+      company: d.nombreEmpresa || null,
+    },
+  });
+
+  const now = new Date();
+  const preNotes = [
+    d.especialidad && `Especialidad: ${d.especialidad}`,
+    d.tipoConsulta && `Tipo consulta: ${d.tipoConsulta}`,
+    d.tipoCliente === 'empresa' && d.nombreEmpresa ? `Empresa: ${d.nombreEmpresa}` : null,
+    d.mensaje && `Mensaje: ${d.mensaje}`,
+  ].filter(Boolean).join('\n');
+
+  const appt = await prisma.appointment.create({
+    data: {
+      patientId: patient.id,
+      doctorId: doctor.id,
+      date: new Date(now.getTime() + 24 * 60 * 60 * 1000), // placeholder: mañana
+      durationMin: 30,
+      type: 'PRIMERA_VEZ',
+      status: 'AGENDADA',
+      source: 'AGENT',
+      preNotes: preNotes || null,
+    },
+  });
+
+  emit('appointment:created', { ...appt, patient });
+  res.status(201).json({
+    ok: true,
+    mensaje: 'Solicitud recibida. El personal confirmará fecha y hora a la brevedad.',
+    cita_id: appt.id,
+    paciente_id: patient.id,
   });
 });
 
@@ -436,45 +543,56 @@ router.get('/batches/:id', async (req, res) => {
   });
 });
 
-// DELETE /api/agent/chat/history — reinicia la conversacion web del usuario actual
-router.delete('/chat/history', async (req: any, res) => {
-  const id = req.user?.id || 'web-admin';
-  await prisma.conversation.deleteMany({ where: { channel: 'web', externalId: id } });
-  res.json({ ok: true });
-});
-
-// GET /api/agent/chat/history — historial de la conversacion web del usuario actual
-router.get('/chat/history', async (req: any, res) => {
-  const id = req.user?.id || 'web-admin';
-  const convo = await prisma.conversation.findUnique({
-    where: { channel_externalId: { channel: 'web', externalId: id } },
-    include: { messages: { orderBy: { createdAt: 'asc' }, take: 100 } },
+// ============================================================
+// GET /api/agent/solicitudes-web
+// Lista citas AGENDADAS creadas desde la pagina web (source=AGENT, sin batchId)
+// ============================================================
+router.get('/solicitudes-web', async (_req, res) => {
+  const solicitudes = await prisma.appointment.findMany({
+    where: { source: 'AGENT', batchId: null, status: { in: ['AGENDADA', 'CONFIRMADA'] } },
+    include: { patient: true, doctor: { select: { fullName: true } } },
+    orderBy: { createdAt: 'desc' },
   });
-  if (!convo) return res.json({ messages: [] });
-  const messages = convo.messages
-    .filter((m) => m.role === 'user' || m.role === 'assistant')
-    .map((m) => ({
-      role: m.role === 'user' ? 'user' : 'agent',
-      text: m.role === 'assistant'
-        ? (Array.isArray(m.content) ? (m.content as any[]).filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n') : String(m.content))
-        : String(m.content),
-    }))
-    .filter((m) => m.text.trim());
-  res.json({ messages });
+  res.json(solicitudes);
 });
 
-// POST /api/agent/chat — chat web desde el panel admin
-router.post('/chat', async (req: any, res) => {
-  const { message, sessionId } = req.body;
-  if (!message?.trim()) return res.status(400).json({ error: 'message requerido' });
-  const id = sessionId || req.user?.id || 'web-admin';
-  try {
-    const reply = await processMessage('web', id, message.trim());
-    res.json({ reply });
-  } catch (err: any) {
-    console.error('[agent/chat]', err);
-    res.status(500).json({ error: err.message || 'Error interno' });
+// ============================================================
+// POST /api/agent/solicitudes-web/:id/confirmar  { fecha? }
+// Confirma cita web y opcionalmente actualiza la fecha
+// ============================================================
+const confirmarSchema = z.object({
+  fecha: z.string().optional(),
+});
+router.post('/solicitudes-web/:id/confirmar', async (req, res) => {
+  const parsed = confirmarSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+  const appt = await prisma.appointment.findUnique({ where: { id: req.params.id } });
+  if (!appt) return res.status(404).json({ ok: false, error: 'Cita no encontrada' });
+
+  const data: any = { status: 'CONFIRMADA' };
+  if (parsed.data.fecha) {
+    const d = new Date(parsed.data.fecha);
+    if (!isNaN(d.getTime())) data.date = d;
   }
+
+  const updated = await prisma.appointment.update({ where: { id: appt.id }, data });
+  emit('appointment:updated', updated);
+  res.json({ ok: true, cita_id: updated.id, status: updated.status });
+});
+
+// ============================================================
+// POST /api/agent/solicitudes-web/:id/cancelar
+// ============================================================
+router.post('/solicitudes-web/:id/cancelar', async (req, res) => {
+  const appt = await prisma.appointment.findUnique({ where: { id: req.params.id } });
+  if (!appt) return res.status(404).json({ ok: false, error: 'Cita no encontrada' });
+  const updated = await prisma.appointment.update({
+    where: { id: appt.id },
+    data: { status: 'CANCELADA' },
+  });
+  emit('appointment:updated', updated);
+  res.json({ ok: true });
 });
 
 export default router;

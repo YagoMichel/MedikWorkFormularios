@@ -56,6 +56,11 @@ router.put('/:id', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   try {
+    const target = await prisma.user.findUnique({ where: { id: req.params.id }, select: { role: true } });
+    if (target?.role === 'AGENT') {
+      res.status(403).json({ error: 'El usuario de servicio AGENT no puede eliminarse' });
+      return;
+    }
     await prisma.user.delete({ where: { id: req.params.id } });
     res.status(204).end();
   } catch {

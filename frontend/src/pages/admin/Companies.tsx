@@ -1,3 +1,11 @@
+// =============================================================
+// ARCHIVO: src/pages/admin/Companies.tsx
+// SECCION: ADMIN (compañero)
+// DESCRIPCION: Gestion de empresas cliente.
+//              Las empresas se usan para agendar jornadas
+//              empresariales de examenes medicos grupales.
+// API: GET/POST/PUT/DELETE /api/companies
+// =============================================================
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../services/api';
 import { useState } from 'react';

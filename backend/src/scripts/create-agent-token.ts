@@ -30,11 +30,11 @@ async function main() {
   const token = jwt.sign(
     { id: user.id, role: user.role, email: user.email },
     SECRET,
-    { expiresIn: '365d' }
+    {} // sin expiración — token de servicio máquina-a-máquina
   );
 
   console.log('\n========================================');
-  console.log('JWT de servicio (valido 1 ano)');
+  console.log('JWT de servicio (sin expiracion)');
   console.log('========================================');
   console.log(token);
   console.log('========================================\n');

@@ -1,3 +1,10 @@
+// =============================================================
+// ARCHIVO: src/pages/admin/Movements.tsx
+// SECCION: ADMIN (compañero)
+// DESCRIPCION: Historial de movimientos de inventario.
+//              Entradas, salidas y ajustes de productos.
+// API: GET /api/movements, POST /api/movements
+// =============================================================
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../services/api';
 import { useState } from 'react';

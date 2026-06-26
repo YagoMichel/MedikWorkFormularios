@@ -14,7 +14,7 @@ router.get('/admin', requireRole('ADMIN'), async (_req, res) => {
   const monthStart = startOfMonth();
   const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
 
-  const [salesToday, salesYesterday, salesMonth, salesLastMonth, patientsToday, patientsYesterday, lowStock, last30, top5, lastSales, todaysAppointments, lowStockList, empresasCount] = await Promise.all([
+  const [salesToday, salesYesterday, salesMonth, salesLastMonth, patientsToday, patientsYesterday, lowStock, last30, top5, lastSales, todaysAppointments, lowStockList, empresasCount, pendingBatches] = await Promise.all([
     prisma.sale.aggregate({ _sum: { total: true }, _count: true, where: { createdAt: { gte: today }, status: { not: 'CANCELADA' } } }),
     prisma.sale.aggregate({ _sum: { total: true }, _count: true, where: { createdAt: { gte: yesterday, lt: today }, status: { not: 'CANCELADA' } } }),
     prisma.sale.aggregate({ _sum: { total: true }, _count: true, where: { createdAt: { gte: monthStart }, status: { not: 'CANCELADA' } } }),
@@ -37,6 +37,7 @@ router.get('/admin', requireRole('ADMIN'), async (_req, res) => {
     prisma.appointment.findMany({ where: { date: { gte: today, lt: new Date(today.getTime() + 86400000) } }, include: { patient: true, doctor: { select: { fullName: true } } }, orderBy: { date: 'asc' } }),
     prisma.product.findMany({ where: { active: true }, orderBy: { stock: 'asc' }, take: 20 }),
     prisma.company.count(),
+    prisma.companyBatch.count({ where: { status: 'BORRADOR' } }),
   ]);
 
   // Stock crítico
@@ -71,6 +72,7 @@ router.get('/admin', requireRole('ADMIN'), async (_req, res) => {
       patientsToday: { count: patientsToday, prev: patientsYesterday },
       lowStock: { count: lowStockCount },
       empresas: { count: empresasCount },
+      pendingBatches: pendingBatches,
     },
     revenue30d: last30,
     movementsByWeek: weeks,
@@ -78,6 +80,110 @@ router.get('/admin', requireRole('ADMIN'), async (_req, res) => {
     lastSales,
     todaysAppointments,
     lowStockProducts,
+  });
+});
+
+router.get('/reportes', requireRole('ADMIN'), async (_req, res) => {
+  const now = new Date();
+  const TZ = 'America/Mexico_City';
+
+  // Últimos 12 meses
+  const months: { label: string; start: Date; end: Date }[] = [];
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const start = new Date(d.getFullYear(), d.getMonth(), 1);
+    const end = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+    const label = d.toLocaleDateString('es-MX', { month: 'short', year: '2-digit', timeZone: TZ });
+    months.push({ label, start, end });
+  }
+
+  const now2 = new Date();
+  const [ventasMes, citasMes, top5Companies, top5Products, batchesByStatus, usuariosPorRol, totalPacientes, totalEmpresas, citasPendientes, citasConfirmadas, proximaCita] = await Promise.all([
+    // Ventas mensuales
+    Promise.all(months.map(async ({ label, start, end }) => {
+      const r = await prisma.sale.aggregate({ _sum: { total: true }, _count: true, where: { createdAt: { gte: start, lt: end }, status: { not: 'CANCELADA' } } });
+      return { mes: label, total: r._sum.total || 0, count: r._count };
+    })),
+
+    // Citas empresariales por mes
+    Promise.all(months.map(async ({ label, start, end }) => {
+      const count = await prisma.companyBatch.count({ where: { date: { gte: start, lt: end }, status: { not: 'CANCELADO' } } });
+      const workers = await prisma.companyBatch.aggregate({ _sum: { expectedCount: true }, where: { date: { gte: start, lt: end }, status: { not: 'CANCELADO' } } });
+      return { mes: label, citas: count, trabajadores: workers._sum.expectedCount || 0 };
+    })),
+
+    // Top 5 empresas por trabajadores atendidos
+    prisma.companyBatch.groupBy({
+      by: ['companyId'],
+      _sum: { expectedCount: true },
+      _count: true,
+      where: { status: 'CONFIRMADO' },
+      orderBy: { _sum: { expectedCount: 'desc' } },
+      take: 5,
+    }).then(async (rows) => {
+      const ids = rows.map((r) => r.companyId);
+      const companies = await prisma.company.findMany({ where: { id: { in: ids } } });
+      return rows.map((r) => {
+        const c = companies.find((c) => c.id === r.companyId);
+        return { empresa: c?.name || '?', trabajadores: r._sum.expectedCount || 0, citas: r._count };
+      });
+    }),
+
+    // Top 5 productos más vendidos (unidades) este año
+    prisma.saleItem.groupBy({
+      by: ['productId'],
+      _sum: { quantity: true, subtotal: true },
+      where: { sale: { createdAt: { gte: new Date(now.getFullYear(), 0, 1) }, status: { not: 'CANCELADA' } } },
+      orderBy: { _sum: { quantity: 'desc' } },
+      take: 5,
+    }).then(async (rows) => {
+      const ids = rows.map((r) => r.productId);
+      const products = await prisma.product.findMany({ where: { id: { in: ids } } });
+      return rows.map((r) => {
+        const p = products.find((p) => p.id === r.productId);
+        return { producto: p?.name || '?', unidades: r._sum.quantity || 0, ingresos: r._sum.subtotal || 0 };
+      });
+    }),
+
+    // Distribución de batches por status
+    prisma.companyBatch.groupBy({ by: ['status'], _count: true }),
+
+    // Usuarios por rol (para pastel)
+    prisma.user.groupBy({ by: ['role'], _count: true, where: { active: true } }),
+
+    // Totales generales
+    prisma.patient.count(),
+    prisma.company.count(),
+
+    // Citas por confirmar y confirmadas (futuras)
+    prisma.appointment.count({ where: { date: { gte: now2 }, status: 'AGENDADA' } }),
+    prisma.appointment.count({ where: { date: { gte: now2 }, status: 'CONFIRMADA' } }),
+    prisma.appointment.findFirst({ where: { date: { gte: now2 }, status: { notIn: ['CANCELADA', 'NO_ASISTIO'] } }, orderBy: { date: 'asc' } }),
+  ]);
+
+  // KPIs derivados
+  const citasConDatos = citasMes.filter((c: any) => c.citas > 0);
+  const promedioCitasMes = citasConDatos.length > 0
+    ? Math.round(citasMes.reduce((sum: number, c: any) => sum + c.citas, 0) / citasConDatos.length)
+    : 0;
+  const promedioTrabajadoresMes = citasConDatos.length > 0
+    ? Math.round(citasMes.reduce((sum: number, c: any) => sum + c.trabajadores, 0) / citasConDatos.length)
+    : 0;
+  const totalCitasAnio = citasMes.reduce((sum: number, c: any) => sum + c.citas, 0);
+  const totalTrabajadoresAnio = citasMes.reduce((sum: number, c: any) => sum + c.trabajadores, 0);
+
+  const ROLE_LABELS: Record<string, string> = { ADMIN: 'Admin', DOCTOR: 'Doctor', PACIENTE: 'Paciente', AGENT: 'Agente' };
+  const usuariosPastel = usuariosPorRol
+    .filter((u: any) => u.role !== 'AGENT')
+    .map((u: any) => ({ name: ROLE_LABELS[u.role] || u.role, value: u._count }));
+
+  res.json({
+    ventasMes, citasMes, top5Companies, top5Products, batchesByStatus,
+    usuariosPastel,
+    kpis: { promedioCitasMes, promedioTrabajadoresMes, totalCitasAnio, totalTrabajadoresAnio, totalPacientes, totalEmpresas },
+    citasPendientes,
+    citasConfirmadas,
+    proximaCita: proximaCita ? proximaCita.date : null,
   });
 });
 

@@ -1,3 +1,10 @@
+// =============================================================
+// ARCHIVO: src/pages/admin/Dashboard.tsx
+// SECCION: ADMIN (compañero)
+// DESCRIPCION: Dashboard del administrador. Muestra KPIs globales:
+//              ventas del dia, citas, inventario bajo stock,
+//              y actualizaciones en tiempo real via WebSocket.
+// =============================================================
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../services/api';
 import { useEffect } from 'react';
@@ -24,7 +31,6 @@ export default function AdminDashboard() {
   const k = data.kpis;
 
   const salesPct = pct(k.salesMonth.total, k.salesMonth.prevTotal);
-  const patientsPct = pct(k.patientsToday.count, k.patientsToday.prev);
 
   const initials = (user?.fullName || '?').split(' ').filter(Boolean).slice(0, 2).map((p: string) => p[0]).join('').toUpperCase();
 
@@ -50,18 +56,14 @@ export default function AdminDashboard() {
 
       {/* Tarjetas secundarias */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-lg">
-        {/* Pacientes hoy */}
+        {/* Citas pendientes */}
         <div className="card rounded-2xl p-6 flex flex-col gap-1">
           <div className="flex items-center gap-2 text-orange-500 font-semibold text-sm">
-            <span className="material-symbols-rounded">group</span>
-            Pacientes
+            <span className="material-symbols-rounded">pending_actions</span>
+            Citas
           </div>
-          <div className="text-3xl font-extrabold text-orange-600">{k.patientsToday.count}</div>
-          <div className="text-xs text-ink-muted uppercase tracking-wide">Atendidos hoy</div>
-          <div className={`text-xs flex items-center gap-1 mt-1 ${patientsPct >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-            <span className="material-symbols-rounded text-sm">{patientsPct >= 0 ? 'trending_up' : 'trending_down'}</span>
-            {Math.abs(patientsPct).toFixed(1)}% vs ayer
-          </div>
+          <div className="text-3xl font-extrabold text-orange-600">{k.pendingBatches}</div>
+          <div className="text-xs text-ink-muted uppercase tracking-wide">Pendientes por confirmar</div>
         </div>
 
         {/* Empresas */}

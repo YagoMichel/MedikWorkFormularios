@@ -1,7 +1,15 @@
+// =============================================================
+// ARCHIVO: src/pages/tablet/Home.tsx
+// SECCION: TABLET (tuyo)
+// DESCRIPCION: Pantalla principal del kiosk/tablet.
+//              El paciente llega, ve esta pantalla y presiona
+//              "Generar nueva encuesta" para llenar su historial
+//              medico antes del examen.
+// =============================================================
 import { useState } from 'react';
 import SurveyFlow from './SurveyFlow';
 
-export default function PacienteDashboard() {
+export default function TabletHome() {
   const [open, setOpen] = useState(false);
 
   if (open) return <SurveyFlow onClose={() => setOpen(false)} />;

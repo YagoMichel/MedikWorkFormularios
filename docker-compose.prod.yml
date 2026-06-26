@@ -1,0 +1,49 @@
+name: mediwork2
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: mediwork2-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mediwork
+      POSTGRES_PASSWORD: ${DB_PASS}
+      POSTGRES_DB: mediwork
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mediwork"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    container_name: mediwork2-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env.prod
+    environment:
+      DATABASE_URL: postgresql://mediwork:${DB_PASS}@db:5432/mediwork?schema=public
+      PORT: 4000
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - uploads:/app/uploads
+
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
+    container_name: mediwork2-nginx
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "127.0.0.1:7000:80"
+
+volumes:
+  pgdata:
+  uploads:

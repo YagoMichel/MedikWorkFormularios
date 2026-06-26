@@ -1,3 +1,11 @@
+// =============================================================
+// ARCHIVO: src/pages/admin/Users.tsx
+// SECCION: ADMIN (compañero)
+// DESCRIPCION: Gestion de usuarios del sistema.
+//              Permite crear/editar/desactivar usuarios con roles:
+//              ADMIN, DOCTOR, PACIENTE (tablet).
+// API: GET/POST/PUT /api/users
+// =============================================================
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../services/api';
 import { useState } from 'react';
