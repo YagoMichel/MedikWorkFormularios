@@ -1,18 +1,17 @@
 // =============================================================
 // ARCHIVO: src/components/layout/MainLayout.tsx
-// DESCRIPCION: Layout principal con sidebar de navegacion.
-//              Usado por ADMIN y DOCTOR.
-//              El sidebar muestra links distintos segun el rol.
+// DESCRIPCION: Layout principal con sidebar (desktop) y barra
+//              inferior flotante (móvil). Usado por ADMIN y DOCTOR.
 //
-// SIDEBAR ADMIN  → Dashboard, Inventario, Empresas, Usuarios,
-//                  Citas, Calendario, Reportes
-// SIDEBAR DOCTOR → Dashboard, Agenda, Pacientes
+// DESKTOP (≥768px): sidebar fijo izquierdo de 68px
+// MÓVIL   (<768px): sidebar oculto, BottomNav visible
 // =============================================================
 
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../stores/auth';
 import { useTheme } from '../../stores/theme.tsx';
 import logo from '../../assets/logo.png';
+import BottomNav from './BottomNav';
 
 const Icon = ({ name }: { name: string }) => <span className="material-symbols-rounded">{name}</span>;
 
@@ -24,23 +23,24 @@ export default function MainLayout() {
   const isAdmin = user?.role === 'ADMIN';
 
   const links = isAdmin ? [
-    { to: '/', icon: 'dashboard', label: 'Dashboard' },
-    { to: '/inventory', icon: 'inventory_2', label: 'Inventario' },
-    { to: '/companies', icon: 'business', label: 'Empresas' },
-    { to: '/users', icon: 'manage_accounts', label: 'Usuarios' },
-    { to: '/citas', icon: 'calendar_month', label: 'Citas' },
-    { to: '/calendario', icon: 'date_range', label: 'Calendario' },
-    { to: '/reportes', icon: 'bar_chart', label: 'Reportes' },
+    { to: '/',          icon: 'dashboard',      label: 'Dashboard'  },
+    { to: '/inventory', icon: 'inventory_2',    label: 'Inventario' },
+    { to: '/companies', icon: 'business',       label: 'Empresas'   },
+    { to: '/users',     icon: 'manage_accounts',label: 'Usuarios'   },
+    { to: '/citas',     icon: 'calendar_month', label: 'Citas'      },
+    { to: '/calendario',icon: 'date_range',     label: 'Calendario' },
+    { to: '/reportes',  icon: 'bar_chart',      label: 'Reportes'   },
   ] : [
-    { to: '/', icon: 'dashboard', label: 'Dashboard' },
-    { to: '/appointments', icon: 'event', label: 'Agenda' },
-    { to: '/patients', icon: 'group', label: 'Pacientes' },
+    { to: '/',             icon: 'dashboard', label: 'Dashboard' },
+    { to: '/appointments', icon: 'event',     label: 'Agenda'    },
+    { to: '/patients',     icon: 'group',     label: 'Pacientes' },
   ];
 
   const titleMap: Record<string, string> = {
     '/': 'Dashboard', '/patients': 'Pacientes', '/sales': 'Ventas',
     '/appointments': 'Agenda', '/inventory': 'Inventario',
-    '/movements': 'Movimientos', '/users': 'Usuarios', '/prescriptions': 'Recetas','/citas': 'Citas', '/calendario': 'Calendario', '/reportes': 'Reportes',
+    '/movements': 'Movimientos', '/users': 'Usuarios', '/prescriptions': 'Recetas',
+    '/citas': 'Citas', '/calendario': 'Calendario', '/reportes': 'Reportes',
   };
   const title = titleMap[loc.pathname] || (loc.pathname.startsWith('/patients/') ? 'Ficha de paciente' : 'Mediwork');
 
@@ -48,8 +48,8 @@ export default function MainLayout() {
 
   return (
     <div className="layout-root min-h-screen flex">
-      {/* Sidebar */}
-      <aside className="layout-sidebar fixed left-0 top-0 h-screen w-[68px] flex flex-col items-center z-40">
+      {/* Sidebar — oculto en móvil, visible en desktop */}
+      <aside className="layout-sidebar hidden md:flex fixed left-0 top-0 h-screen w-[68px] flex-col items-center z-40">
         <div className="layout-sidebar-top py-4 w-full flex justify-center border-b">
           <img src={logo} alt="Logo" className="w-10 h-10 object-contain" />
         </div>
@@ -83,9 +83,9 @@ export default function MainLayout() {
         </div>
       </aside>
 
-      {/* Main */}
-      <div className="flex-1 ml-[68px] flex flex-col min-h-screen">
-        <header className="layout-header fixed top-0 right-0 left-[68px] h-[70px] z-30 flex items-center px-6 backdrop-blur-md border-b">
+      {/* Contenido principal */}
+      <div className="flex-1 md:ml-[68px] flex flex-col min-h-screen">
+        <header className="layout-header fixed top-0 right-0 left-0 md:left-[68px] h-[70px] z-30 flex items-center px-6 backdrop-blur-md border-b">
           <h2 className="layout-title absolute left-1/2 -translate-x-1/2 text-base font-bold">{title}</h2>
           <div className="ml-auto flex items-center gap-2">
             <button onClick={toggle} className="layout-icon-btn w-9 h-9 rounded-xl flex items-center justify-center transition" title={dark ? 'Modo claro' : 'Modo oscuro'}>
@@ -97,15 +97,22 @@ export default function MainLayout() {
             <div className="layout-user flex items-center gap-2 px-2 py-1 rounded-xl">
               <div className="w-7 h-7 rounded-full text-white text-[11px] font-bold flex items-center justify-center"
                 style={{ background: 'linear-gradient(135deg, #3375c8, #51abcd)' }}>{initials}</div>
-              <div className="leading-tight">
+              <div className="leading-tight hidden sm:block">
                 <div className="layout-username text-xs font-semibold">{user?.fullName}</div>
                 <div className="layout-role text-[10px]">{user?.role}</div>
               </div>
             </div>
           </div>
         </header>
-        <main className="pt-[70px] p-6 flex-1"><Outlet /></main>
+
+        {/* padding-bottom extra en móvil para no quedar bajo la barra flotante */}
+        <main className="pt-[70px] p-6 pb-24 md:pb-6 flex-1">
+          <Outlet />
+        </main>
       </div>
+
+      {/* Barra inferior flotante (solo visible en móvil vía CSS) */}
+      <BottomNav isAdmin={isAdmin} />
     </div>
   );
 }
