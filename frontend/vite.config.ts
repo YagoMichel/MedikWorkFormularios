@@ -10,6 +10,12 @@ export default defineConfig({
       '/api': { target: 'http://backend:4000', changeOrigin: true },
       '/uploads': { target: 'http://backend:4000', changeOrigin: true },
       '/socket.io': { target: 'http://backend:4000', ws: true, changeOrigin: true },
+      '/cp-proxy': {
+        target: 'https://sepomex.icalialabs.com/api/v1',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/cp-proxy/, ''),
+        secure: true,
+      },
     },
   },
 });

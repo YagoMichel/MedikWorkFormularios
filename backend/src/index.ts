@@ -86,8 +86,10 @@ app.post('/api/public/survey', async (req, res) => {
         calle: d.calle, numero: d.numero, colonia: d.colonia, municipio: d.municipio, cp: d.cp,
         // Habitos
         practicaDeporte: d.practicaDeporte ?? null, cualDeporte: d.cualDeporte,
-        horasDeporte: d.horasDeporte, habitosAlimenticios: d.habitosAlimenticios,
-        calidadSueno: d.calidadSueno, especifiqueSueno: d.especifiqueSueno,
+        frecuenciaDeporte: d.frecuenciaDeporte, horasDeporte: d.horasDeporte,
+        habitosAlimenticios: d.habitosAlimenticios, comidasDia: d.comidasDia,
+        consumeFrutasVerduras: d.consumeFrutasVerduras, aguaDia: d.aguaDia,
+        calidadSueno: d.calidadSueno, horasSueno: d.horasSueno, especifiqueSueno: d.especifiqueSueno,
         // Tabaquismo
         fuma: d.fuma, edadInicioFuma: d.edadInicioFuma, anosFumando: d.anosFumando, cigarrosDia: d.cigarrosDia,
         // Alcoholismo
@@ -103,7 +105,7 @@ app.post('/api/public/survey', async (req, res) => {
         // Antecedentes (JSON arrays)
         antecedentesFamiliares: d.antecedentesFamiliares,
         // Laborales
-        edadInicioLaboral: d.edadInicioLaboral, trabajoMinas: d.trabajoMinas,
+        edadInicioLaboral: d.edadInicioLaboral, trabajoMinas: d.trabajoMinas ?? null, tiempoMinas: d.tiempoMinas,
         exposiciones: d.exposiciones, historialEmpleos: d.historialEmpleos,
         antecedentesPatologicos: d.antecedentesPatologicos,
       },
@@ -114,6 +116,66 @@ app.post('/api/public/survey', async (req, res) => {
     console.error('[public/survey]', err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// Proxy de código postal — prueba varias APIs en cascada
+app.get('/api/public/cp/:codigo', async (req, res) => {
+  const { codigo } = req.params;
+  if (!/^\d{5}$/.test(codigo)) return res.status(400).json({ error: 'CP inválido' }) as any;
+
+  // API 1: copomex
+  try {
+    const r = await fetch(`https://api.copomex.com/query/info_cp/${codigo}?token=pruebas`,
+      { signal: AbortSignal.timeout(8000) });
+    if (r.ok) {
+      const data = await r.json() as any;
+      const items: any[] = Array.isArray(data) ? data : [data];
+      const valid = items.filter((i: any) => !i.error && i.codigo_postal);
+      if (valid.length) {
+        return res.json({
+          municipio: valid[0].codigo_postal.D_mnpio || '',
+          estado:    valid[0].codigo_postal.d_estado || '',
+          colonias:  [...new Set<string>(valid.map((i: any) => i.codigo_postal.d_asenta).filter(Boolean))],
+        });
+      }
+    }
+  } catch (e: any) { console.error('[cp copomex]', e.message); }
+
+  // API 2: IcaliaLabs sepomex
+  try {
+    const r = await fetch(`https://sepomex.icalialabs.com/api/v1/zip_codes?zip_code=${codigo}`,
+      { signal: AbortSignal.timeout(8000), headers: { Accept: 'application/json' } });
+    if (r.ok) {
+      const data = await r.json() as any;
+      const items: any[] = data.zip_codes || [];
+      if (items.length) {
+        return res.json({
+          municipio: items[0].D_mnpio || '',
+          estado:    items[0].d_estado || '',
+          colonias:  [...new Set<string>(items.map((i: any) => i.d_asenta).filter(Boolean))],
+        });
+      }
+    }
+  } catch (e: any) { console.error('[cp icalialabs]', e.message); }
+
+  // API 3: zippopotam (solo estado)
+  try {
+    const r = await fetch(`https://api.zippopotam.us/mx/${codigo}`,
+      { signal: AbortSignal.timeout(8000) });
+    if (r.ok) {
+      const data = await r.json() as any;
+      const places: any[] = data.places || [];
+      if (places.length) {
+        return res.json({
+          municipio: '',
+          estado:    places[0].state || '',
+          colonias:  places.map((p: any) => p['place name']).filter(Boolean),
+        });
+      }
+    }
+  } catch (e: any) { console.error('[cp zippopotam]', e.message); }
+
+  res.status(404).json({ error: 'CP no encontrado' });
 });
 
 // =============================================================

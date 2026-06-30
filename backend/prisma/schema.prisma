@@ -389,13 +389,22 @@ model PatientSurvey {
   municipio String?
   cp        String?
 
-  // Hábitos
-  practicaDeporte     Boolean?
-  cualDeporte         String?
-  horasDeporte        String?
-  habitosAlimenticios String?  // Bueno | Regular | Malo
-  calidadSueno        String?  // Bueno | Malo
-  especifiqueSueno    String?
+  // Hábitos — actividad física
+  practicaDeporte   Boolean?
+  cualDeporte       String?
+  frecuenciaDeporte String?  // Diario | 3-4 veces/sem | 1-2 veces/sem | Fines de semana
+  horasDeporte      String?
+
+  // Hábitos — alimentación
+  habitosAlimenticios   String?  // Bueno | Regular | Malo
+  comidasDia            String?  // 1-2 | 3 | 4-5 | Más de 5
+  consumeFrutasVerduras String?  // Diario | Frecuente | Poco | Nunca
+  aguaDia               String?  // Menos de 1L | 1-2L | 2-3L | Más de 3L
+
+  // Hábitos — sueño
+  calidadSueno     String?  // Bueno | Regular | Malo
+  horasSueno       String?  // Menos de 5h | 5-6h | 7-8h | Más de 8h
+  especifiqueSueno String?
 
   // Tabaquismo
   fuma           String?  // SI | NO | EXFUMADOR
@@ -429,7 +438,8 @@ model PatientSurvey {
 
   // Laborales
   edadInicioLaboral String?
-  trabajoMinas      String?
+  trabajoMinas      Boolean?
+  tiempoMinas       String?
   exposiciones      Json?   // {ruidos, polvos, vapores, humos, riesgoElectrico, usaEpp}
   historialEmpleos  Json?   // [{empresa, cargo, tiempo, exponentes}]
 
