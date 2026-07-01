@@ -129,8 +129,12 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-main); 
 .input { width: 100%; background: var(--bg-elevated); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 9px 14px; font-size: 13px; outline: none; color: var(--text-primary); }
 .input:focus { border-color: var(--primary-400); box-shadow: 0 0 0 3px rgba(45,150,165,0.15); background: var(--bg-card); }
 
+/* Inputs */
+.input-sm { padding: 7px 12px; font-size: 12px; }
+
 /* Cards */
-.card { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 16px; padding: 20px; }
+.card { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 18px; padding: 22px; }
+.card-survey { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 18px; padding: 22px 24px; }
 .card-title { font-size: 15px; font-weight: 700; color: var(--text-primary); margin-bottom: 16px; }
 
 /* Stat cards */

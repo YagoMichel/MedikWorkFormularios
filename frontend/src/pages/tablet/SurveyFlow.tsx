@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { api } from '../../services/api';
 import toast from 'react-hot-toast';
 
@@ -514,12 +514,29 @@ const empty = {
   antecedentesPatologicos: ANTECEDENTES_PATOLOGICOS.map(({ condicion }) => ({ condicion, si: null as boolean | null, entradas: [{ especifique: '', fecha: '' }] })),
 };
 
+// ── Pasos del wizard ────────────────────────────────────────────────
+const STEP_COLOR = '#3375c8';
+const FORM_STEPS = [
+  { icon: 'business_center',    label: 'Trabajo',   color: STEP_COLOR },
+  { icon: 'person',             label: 'Datos',     color: STEP_COLOR },
+  { icon: 'fitness_center',     label: 'Hábitos',   color: STEP_COLOR },
+  { icon: 'smoking_rooms',      label: 'Consumo',   color: STEP_COLOR },
+  { icon: 'vaccines',           label: 'Salud',     color: STEP_COLOR },
+  { icon: 'family_history',     label: 'Familia',   color: STEP_COLOR },
+  { icon: 'work',               label: 'Laboral',   color: STEP_COLOR },
+  { icon: 'medical_information',label: 'Clínico',   color: STEP_COLOR },
+];
+
+// ── Color de paso activo (contexto ligero) ───────────────────────────
+const StepColorCtx = createContext('#3375c8');
+const useStepColor = () => useContext(StepColorCtx);
+
 // ── Componentes reutilizables ────────────────────────────────────────
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
-    <label className="block text-[11px] font-semibold uppercase tracking-wide mb-1"
-      style={{ color: 'var(--text-muted)' }}>
+    <label className="block text-[11px] font-semibold uppercase tracking-wide mb-1.5"
+      style={{ color: 'var(--text-muted)', letterSpacing: '0.06em' }}>
       {children}
     </label>
   );
@@ -534,31 +551,88 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function SectionHeader({ icon, title }: { icon: string; title: string }) {
+function SectionHeader({ icon, title, color }: { icon: string; title: string; color?: string }) {
+  const c = color ?? '#3375c8';
   return (
-    <div className="flex items-center gap-2 pb-3 border-b" style={{ borderColor: 'var(--border-subtle)' }}>
-      <span className="material-symbols-rounded" style={{ color: '#3375c8', fontSize: 20 }}>{icon}</span>
-      <h3 className="font-bold text-sm uppercase tracking-wider" style={{ color: 'var(--text-primary)' }}>{title}</h3>
+    <div className="flex items-center gap-3 pb-4 mb-1 border-b" style={{ borderColor: 'var(--border-subtle)' }}>
+      <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+        style={{ background: `${c}20` }}>
+        <span className="material-symbols-rounded" style={{ color: c, fontSize: 20 }}>{icon}</span>
+      </div>
+      <h3 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>{title}</h3>
     </div>
   );
 }
 
-function Pills({ options, value, onChange }: {
+function StepProgress({ current, total, steps, onGoTo }: {
+  current: number;
+  total: number;
+  steps: typeof FORM_STEPS;
+  onGoTo: (step: number) => void;
+}) {
+  return (
+    <div className="sticky top-0 z-10 px-4 py-3 border-b"
+      style={{ background: 'var(--bg-card)', borderColor: 'var(--border-subtle)' }}>
+      {/* barra de progreso */}
+      <div className="w-full h-1 rounded-full mb-3" style={{ background: 'var(--bg-elevated)' }}>
+        <div className="h-1 rounded-full transition-all duration-500"
+          style={{ width: `${((current - 1) / (total - 1)) * 100}%`, background: steps[current - 1].color }} />
+      </div>
+      {/* puntos de pasos — clickeables */}
+      <div className="flex items-center justify-between">
+        {steps.map((s, i) => {
+          const done = i + 1 < current;
+          const active = i + 1 === current;
+          return (
+            <button key={i} type="button"
+              onClick={() => onGoTo(i + 1)}
+              className="flex flex-col items-center gap-1 transition-opacity hover:opacity-80"
+              style={{ minWidth: 0, cursor: 'pointer' }}
+              title={s.label}>
+              <div className="w-7 h-7 rounded-full flex items-center justify-center transition-all duration-300"
+                style={active
+                  ? { background: s.color, boxShadow: `0 0 0 3px ${s.color}30` }
+                  : done
+                    ? { background: s.color, opacity: 0.75 }
+                    : { background: 'var(--bg-elevated)', border: '2px solid var(--border-subtle)' }}>
+                {done
+                  ? <span className="material-symbols-rounded text-white" style={{ fontSize: 14 }}>check</span>
+                  : <span className="material-symbols-rounded" style={{ fontSize: 14, color: active ? '#fff' : 'var(--text-muted)' }}>{s.icon}</span>
+                }
+              </div>
+              <span className="text-[9px] font-semibold hidden sm:block transition-all"
+                style={{ color: active ? s.color : 'var(--text-muted)' }}>
+                {s.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function Pills({ options, value, onChange, color: colorProp }: {
   options: { v: string; l: string }[];
   value: string;
   onChange: (v: string) => void;
+  color?: string;
 }) {
+  const color = colorProp ?? useStepColor();
   return (
-    <div className="flex flex-wrap gap-2">
-      {options.map(({ v, l }) => (
-        <button key={v} type="button" onClick={() => onChange(v)}
-          className="px-4 py-2 rounded-xl text-sm font-semibold transition"
-          style={value === v
-            ? { background: '#3375c8', color: '#fff', boxShadow: '0 2px 8px rgba(51,117,200,0.3)' }
-            : { background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}>
-          {l}
-        </button>
-      ))}
+    <div className="flex flex-wrap gap-2 mt-1">
+      {options.map(({ v, l }) => {
+        const active = value === v;
+        return (
+          <button key={v} type="button" onClick={() => onChange(v)}
+            className="px-4 py-1.5 rounded-full text-sm font-semibold transition-all duration-200"
+            style={active
+              ? { background: color, color: '#fff', boxShadow: `0 2px 10px ${color}45`, transform: 'scale(1.03)' }
+              : { background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1.5px solid var(--border-subtle)' }}>
+            {l}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -800,19 +874,28 @@ function ParientesMultiSelect({ selected, onToggle }: {
   );
 }
 
-function BoolPills({ value, onChange }: { value: boolean | null; onChange: (v: boolean) => void }) {
-  const opts: { v: boolean; l: string }[] = [{ v: true, l: 'Sí' }, { v: false, l: 'No' }];
+function BoolPills({ value, onChange, color: colorProp }: { value: boolean | null; onChange: (v: boolean) => void; color?: string }) {
+  const color = colorProp ?? useStepColor();
+  const opts: { v: boolean; l: string; icon: string }[] = [
+    { v: true,  l: 'Sí', icon: 'check' },
+    { v: false, l: 'No', icon: 'close' },
+  ];
   return (
-    <div className="flex gap-2">
-      {opts.map(({ v, l }) => (
-        <button key={String(v)} type="button" onClick={() => onChange(v)}
-          className="px-5 py-2 rounded-xl text-sm font-semibold transition"
-          style={value === v
-            ? { background: '#3375c8', color: '#fff', boxShadow: '0 2px 8px rgba(51,117,200,0.3)' }
-            : { background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}>
-          {l}
-        </button>
-      ))}
+    <div className="flex gap-2 mt-1">
+      {opts.map(({ v, l, icon }) => {
+        const active = value === v;
+        const bg = active ? (v ? color : '#ef4444') : undefined;
+        return (
+          <button key={String(v)} type="button" onClick={() => onChange(v)}
+            className="flex items-center gap-1.5 px-5 py-1.5 rounded-full text-sm font-semibold transition-all duration-200"
+            style={active
+              ? { background: bg, color: '#fff', boxShadow: `0 2px 10px ${bg}50`, transform: 'scale(1.03)' }
+              : { background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1.5px solid var(--border-subtle)' }}>
+            <span className="material-symbols-rounded" style={{ fontSize: 15 }}>{icon}</span>
+            {l}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -821,6 +904,7 @@ function BoolPills({ value, onChange }: { value: boolean | null; onChange: (v: b
 
 export default function SurveyFlow({ onClose }: { onClose: () => void }) {
   const [step, setStep] = useState<Step>('tipo');
+  const [formStep, setFormStep] = useState(1);
   const [patientId, setPatientId] = useState<string | null>(null);
   const [busqueda, setBusqueda] = useState('');
   const [resultados, setResultados] = useState<any[]>([]);
@@ -829,6 +913,7 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
   const [cpLoading, setCpLoading] = useState(false);
   const [coloniaOpciones, setColoniaOpciones] = useState<string[]>([]);
   const cpCache = useRef<Map<string, { colonias: string[]; municipio: string; estado: string }>>(new Map());
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
   const [municipiosDB, setMunicipiosDB] = useState<MunicipiosDB | null>(null);
 
@@ -915,11 +1000,16 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
     setCpLoading(false);
   };
 
-  const buscar = async () => {
-    if (!busqueda.trim()) return;
-    const { data } = await api.get('/patients', { params: { q: busqueda } });
+  const buscar = async (q: string) => {
+    if (!q.trim()) { setResultados([]); return; }
+    const { data } = await api.get('/patients', { params: { q } });
     setResultados(data);
   };
+
+  useEffect(() => {
+    const t = setTimeout(() => buscar(busqueda), 300);
+    return () => clearTimeout(t);
+  }, [busqueda]);
 
   const seleccionarPaciente = (p: any) => {
     setPatientId(p.id);
@@ -1006,43 +1096,115 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
 
   // ── Búsqueda de paciente existente ────────────────────────────────
   if (step === 'buscar') return (
-    <div className="flex-1 flex flex-col items-center p-6 gap-4 max-w-lg mx-auto w-full">
-      <div className="w-full">
-        <h2 className="text-xl font-extrabold mb-1" style={{ color: 'var(--text-primary)' }}>Buscar paciente</h2>
-        <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>Escribe el nombre o número de celular</p>
-        <div className="flex gap-2">
-          <input className="input flex-1" placeholder="Nombre o teléfono" value={busqueda}
+    <div className="flex-1 flex flex-col h-full overflow-hidden">
+      {/* Header */}
+      <div className="px-6 pt-6 pb-4 border-b" style={{ borderColor: 'var(--border-subtle)' }}>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-2xl flex items-center justify-center shrink-0" style={{ background: 'rgba(51,117,200,0.12)' }}>
+            <span className="material-symbols-rounded" style={{ color: '#3375c8', fontSize: 22 }}>manage_search</span>
+          </div>
+          <div>
+            <h2 className="text-lg font-extrabold leading-tight" style={{ color: 'var(--text-primary)' }}>Buscar paciente</h2>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Escribe el nombre o número de celular</p>
+          </div>
+        </div>
+        {/* Input */}
+        <div className="relative">
+          <span className="material-symbols-rounded absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: '#3375c8', fontSize: 20 }}>search</span>
+          <input
+            className="input pl-11 text-base"
+            style={{ borderRadius: 14, fontSize: 15, padding: '11px 14px 11px 42px' }}
+            placeholder="Ej. Juan García o 811 234 5678"
+            value={busqueda}
             onChange={e => setBusqueda(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && buscar()} />
-          <button onClick={buscar} className="btn btn-primary px-5">
-            <span className="material-symbols-rounded text-[18px]">search</span>
-            Buscar
-          </button>
+            autoFocus
+          />
+          {busqueda && (
+            <button
+              type="button"
+              className="absolute right-3 top-1/2 -translate-y-1/2"
+              onClick={() => setBusqueda('')}
+              style={{ color: 'var(--text-muted)' }}>
+              <span className="material-symbols-rounded" style={{ fontSize: 18 }}>close</span>
+            </button>
+          )}
         </div>
       </div>
-      <div className="w-full space-y-2">
+
+      {/* Resultados */}
+      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
+        {resultados.length > 0 && (
+          <p className="text-[11px] font-semibold uppercase tracking-wide mb-3" style={{ color: 'var(--text-muted)' }}>
+            {resultados.length} resultado{resultados.length !== 1 ? 's' : ''}
+          </p>
+        )}
+
         {resultados.map(p => (
           <button key={p.id} onClick={() => seleccionarPaciente(p)}
-            className="card w-full text-left hover:shadow-md transition cursor-pointer"
-            style={{ border: '1px solid var(--border-subtle)' }}
-            onMouseEnter={e => (e.currentTarget.style.borderColor = '#3375c8')}
-            onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border-subtle)')}>
-            <div className="font-semibold" style={{ color: 'var(--text-primary)' }}>{p.fullName}</div>
-            <div className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>
-              {p.phone || '—'} · {p.nss || 'Sin NSS'}
+            className="w-full text-left rounded-2xl px-4 py-3.5 flex items-center gap-4 transition-all duration-150"
+            style={{ background: 'var(--bg-card)', border: '1.5px solid var(--border-subtle)' }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = '#3375c8'; e.currentTarget.style.background = 'rgba(51,117,200,0.05)'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-subtle)'; e.currentTarget.style.background = 'var(--bg-card)'; }}>
+            <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 font-bold text-sm text-white"
+              style={{ background: '#3375c8' }}>
+              {p.fullName?.charAt(0)?.toUpperCase() ?? '?'}
             </div>
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold truncate" style={{ color: 'var(--text-primary)', fontSize: 14 }}>{p.fullName}</div>
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                {p.phone && (
+                  <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>
+                    <span className="material-symbols-rounded" style={{ fontSize: 13 }}>phone</span>
+                    {p.phone}
+                  </span>
+                )}
+                {p.nss && (
+                  <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>
+                    <span className="material-symbols-rounded" style={{ fontSize: 13 }}>badge</span>
+                    {p.nss}
+                  </span>
+                )}
+                {p.company && (
+                  <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--text-muted)' }}>
+                    <span className="material-symbols-rounded" style={{ fontSize: 13 }}>business</span>
+                    {p.company}
+                  </span>
+                )}
+              </div>
+            </div>
+            <span className="material-symbols-rounded shrink-0" style={{ color: '#3375c8', fontSize: 20 }}>chevron_right</span>
           </button>
         ))}
-        {resultados.length === 0 && busqueda && (
-          <div className="card text-center py-6">
-            <span className="material-symbols-rounded text-3xl mb-2 block" style={{ color: 'var(--text-muted)' }}>search_off</span>
-            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Sin resultados para "{busqueda}"</p>
+
+        {resultados.length === 0 && busqueda.trim() && (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: 'var(--bg-elevated)' }}>
+              <span className="material-symbols-rounded" style={{ color: 'var(--text-muted)', fontSize: 32 }}>person_search</span>
+            </div>
+            <p className="font-semibold text-sm mb-1" style={{ color: 'var(--text-primary)' }}>Sin resultados</p>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No se encontró "{busqueda}"</p>
+          </div>
+        )}
+
+        {!busqueda.trim() && (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: 'rgba(51,117,200,0.08)' }}>
+              <span className="material-symbols-rounded" style={{ color: '#3375c8', fontSize: 32 }}>search</span>
+            </div>
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Empieza a escribir para buscar</p>
           </div>
         )}
       </div>
-      <button onClick={() => { setPatientId(null); setStep('form'); }} className="btn btn-secondary">
-        Continuar como paciente nuevo
-      </button>
+
+      {/* Footer */}
+      <div className="px-6 py-4 border-t" style={{ borderColor: 'var(--border-subtle)' }}>
+        <button
+          onClick={() => { setPatientId(null); setBusqueda(''); setResultados([]); setStep('form'); }}
+          className="btn btn-secondary w-full flex items-center justify-center gap-2">
+          <span className="material-symbols-rounded" style={{ fontSize: 18 }}>person_add</span>
+          Registrar como paciente nuevo
+        </button>
+      </div>
     </div>
   );
 
@@ -1050,25 +1212,20 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
   const af = form.antecedentesFamiliares;
   const ap = form.antecedentesPatologicos;
 
+  const stepColor = FORM_STEPS[formStep - 1].color;
+
   return (
-    <div className="flex-1 overflow-y-auto p-4 md:p-6">
-      <div className="space-y-5 pb-10">
+    <StepColorCtx.Provider value={stepColor}>
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <StepProgress current={formStep} total={FORM_STEPS.length} steps={FORM_STEPS}
+        onGoTo={n => { setFormStep(n); scrollRef.current?.scrollTo(0, 0); }} />
 
-        {/* Encabezado de página */}
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-            style={{ background: 'linear-gradient(135deg, #3375c8, #51abcd)' }}>
-            <span className="material-symbols-rounded text-white text-xl">assignment</span>
-          </div>
-          <div>
-            <h2 className="text-lg font-extrabold" style={{ color: 'var(--text-primary)' }}>Cuestionario Médico</h2>
-            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Completa todos los campos posibles</p>
-          </div>
-        </div>
+      <div ref={scrollRef} className="flex-1 overflow-y-auto">
+      <div className="p-4 md:p-6 space-y-5 pb-6">
 
-        {/* INFORMACIÓN GENERAL */}
-        <section className="card space-y-4">
-          <SectionHeader icon="business_center" title="Información general" />
+        {/* ── PASO 1: Trabajo ─────────────────────────────── */}
+        {formStep === 1 && <section className="card space-y-4">
+          <SectionHeader icon="business_center" title="Información general" color={FORM_STEPS[0].color} />
 
           <Field label="Empresa">
             <select className="input" value={form.empresa} onChange={e => set('empresa', e.target.value)}>
@@ -1097,11 +1254,11 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
               placeholder="Actividades que realiza o realizará en su puesto de trabajo"
               value={form.actividades} onChange={e => set('actividades', e.target.value)} />
           </Field>
-        </section>
+        </section>}
 
-        {/* DATOS PERSONALES */}
-        <section className="card space-y-4">
-          <SectionHeader icon="person" title="Datos personales" />
+        {/* ── PASO 2: Datos personales ─────────────────────── */}
+        {formStep === 2 && <section className="card space-y-4">
+          <SectionHeader icon="person" title="Datos personales" color={FORM_STEPS[1].color} />
 
           <Field label="Nombre completo *">
             <input className="input" required placeholder="Ej. Juan Pérez García"
@@ -1312,11 +1469,11 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
               </Field>
             </div>
           </div>
-        </section>
+        </section>}
 
-        {/* HÁBITOS */}
-        <section className="card space-y-5">
-          <SectionHeader icon="fitness_center" title="Hábitos" />
+        {/* ── PASO 3: Hábitos ──────────────────────────────── */}
+        {formStep === 3 && <section className="card space-y-5">
+          <SectionHeader icon="fitness_center" title="Hábitos de vida" color={FORM_STEPS[2].color} />
 
           {/* ── Actividad física ── */}
           <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
@@ -1444,11 +1601,11 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
                 value={form.especifiqueSueno} onChange={e => set('especifiqueSueno', e.target.value)} />
             </Field>
           )}
-        </section>
+        </section>}
 
-        {/* HÁBITOS DE CONSUMO */}
-        <section className="card space-y-5">
-          <SectionHeader icon="smoking_rooms" title="Hábitos de consumo" />
+        {/* ── PASO 4: Consumo ───────────────────────────────── */}
+        {formStep === 4 && <section className="card space-y-5">
+          <SectionHeader icon="smoking_rooms" title="Hábitos de consumo" color={FORM_STEPS[3].color} />
 
           <div className="grid grid-cols-3 gap-6">
 
@@ -1589,11 +1746,11 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
             </div>
 
           </div>
-        </section>
+        </section>}
 
-        {/* VACUNACIÓN Y OTROS */}
-        <section className="card space-y-4">
-          <SectionHeader icon="vaccines" title="Vacunación y otros" />
+        {/* ── PASO 5: Salud ─────────────────────────────────── */}
+        {formStep === 5 && <section className="card space-y-4">
+          <SectionHeader icon="vaccines" title="Vacunación y otros" color={FORM_STEPS[4].color} />
 
           <div>
             <Label>¿Esquema de vacunación completo?</Label>
@@ -1653,11 +1810,11 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
             <Label>¿Usa audífonos con frecuencia para escuchar música?</Label>
             <BoolPills value={form.usaAudifonos} onChange={v => set('usaAudifonos', v)} />
           </div>
-        </section>
+        </section>}
 
-        {/* ANTECEDENTES FAMILIARES */}
-        <section className="card space-y-4">
-          <SectionHeader icon="family_history" title="Antecedentes familiares" />
+        {/* ── PASO 6: Antecedentes familiares ──────────────── */}
+        {formStep === 6 && <section className="card space-y-4">
+          <SectionHeader icon="family_history" title="Antecedentes familiares" color={FORM_STEPS[5].color} />
           <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
             ¿Algún familiar directo padece o ha padecido alguna de estas enfermedades? Selecciona quién.
           </p>
@@ -1689,11 +1846,11 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
               </div>
             ))}
           </div>
-        </section>
+        </section>}
 
-        {/* ANTECEDENTES LABORALES */}
-        <section className="card space-y-4">
-          <SectionHeader icon="work" title="Antecedentes laborales" />
+        {/* ── PASO 7: Laboral ───────────────────────────────── */}
+        {formStep === 7 && <section className="card space-y-4">
+          <SectionHeader icon="work" title="Antecedentes laborales" color={FORM_STEPS[6].color} />
 
           <div className="grid grid-cols-2 gap-4">
             <Field label="Edad de inicio laboral">
@@ -1724,7 +1881,7 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
                   onClick={() => set('exposiciones', { ...form.exposiciones, [k]: !(form.exposiciones as any)[k] })}
                   className="px-4 py-2 rounded-xl text-sm font-semibold transition"
                   style={(form.exposiciones as any)[k]
-                    ? { background: '#3375c8', color: '#fff', boxShadow: '0 2px 8px rgba(51,117,200,0.3)' }
+                    ? { background: stepColor, color: '#fff', boxShadow: `0 2px 8px ${stepColor}50` }
                     : { background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}>
                   {l}
                 </button>
@@ -1736,7 +1893,7 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
                     onClick={() => set('exposiciones', { ruidos: false, polvos: false, vapores: false, humos: false, riesgoElectrico: false, usaEpp: false })}
                     className="px-4 py-2 rounded-xl text-sm font-semibold transition"
                     style={ninguno
-                      ? { background: '#3375c8', color: '#fff', boxShadow: '0 2px 8px rgba(51,117,200,0.3)' }
+                      ? { background: stepColor, color: '#fff', boxShadow: `0 2px 8px ${stepColor}50` }
                       : { background: 'var(--bg-elevated)', color: 'var(--text-muted)', border: '1px solid var(--border-subtle)' }}>
                     Ninguno
                   </button>
@@ -1751,7 +1908,7 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
               <button type="button"
                 onClick={() => set('historialEmpleos', [...form.historialEmpleos, { empresa: '', cargo: '', tiempo: '', exponentes: '' }])}
                 className="flex items-center gap-1 text-xs px-3 py-1 rounded-lg font-semibold transition"
-                style={{ background: 'rgba(51,117,200,0.1)', color: '#3375c8' }}>
+                style={{ background: `${stepColor}18`, color: stepColor }}>
                 <span className="material-symbols-rounded" style={{ fontSize: 15 }}>add</span>
                 Agregar empleo
               </button>
@@ -1796,11 +1953,11 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
               </table>
             </div>
           </div>
-        </section>
+        </section>}
 
-        {/* ANTECEDENTES PATOLÓGICOS */}
-        <section className="card space-y-4">
-          <SectionHeader icon="medical_information" title="Antecedentes patológicos" />
+        {/* ── PASO 8: Patológicos ───────────────────────────── */}
+        {formStep === 8 && <section className="card space-y-4">
+          <SectionHeader icon="medical_information" title="Antecedentes patológicos" color={FORM_STEPS[7].color} />
           <div className="space-y-1">
             {ap.map((item, i) => {
               const meta = ANTECEDENTES_PATOLOGICOS[i];
@@ -1857,7 +2014,7 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
                           set('antecedentesPatologicos', next);
                         }}
                         className="flex items-center gap-1 text-xs px-3 py-1 rounded-lg font-semibold"
-                        style={{ background: 'rgba(51,117,200,0.1)', color: '#3375c8' }}>
+                        style={{ background: `${stepColor}18`, color: stepColor }}>
                         <span className="material-symbols-rounded" style={{ fontSize: 15 }}>add</span>
                         Agregar
                       </button>
@@ -1867,18 +2024,44 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
               );
             })}
           </div>
-        </section>
+        </section>}
 
-        {/* BOTONES */}
-        <div className="flex gap-3 justify-end pt-2">
-          <button onClick={onClose} className="btn btn-secondary">Cancelar</button>
-          <button onClick={guardar} disabled={saving} className="btn btn-primary px-8">
-            <span className="material-symbols-rounded text-[18px]">save</span>
-            {saving ? 'Guardando…' : 'Guardar encuesta'}
+        {/* ── Navegación entre pasos ────────────────────────── */}
+        <div className="flex items-center justify-between pt-2 pb-2">
+          <button
+            onClick={() => formStep > 1 ? setFormStep(s => s - 1) : onClose()}
+            className="btn btn-secondary flex items-center gap-2">
+            <span className="material-symbols-rounded text-[18px]">
+              {formStep > 1 ? 'arrow_back' : 'close'}
+            </span>
+            {formStep > 1 ? 'Anterior' : 'Cancelar'}
           </button>
+
+          <span className="text-xs font-semibold" style={{ color: 'var(--text-muted)' }}>
+            {formStep} / {FORM_STEPS.length}
+          </span>
+
+          {formStep < FORM_STEPS.length ? (
+            <button
+              onClick={() => { setFormStep(s => s + 1); scrollRef.current?.scrollTo(0, 0); }}
+              className="btn flex items-center gap-2 text-white"
+              style={{ background: stepColor, boxShadow: `0 2px 12px ${stepColor}50` }}>
+              Siguiente
+              <span className="material-symbols-rounded text-[18px]">arrow_forward</span>
+            </button>
+          ) : (
+            <button onClick={guardar} disabled={saving}
+              className="btn flex items-center gap-2"
+              style={{ background: stepColor, color: '#fff', boxShadow: `0 2px 12px ${stepColor}50`, opacity: saving ? 0.7 : 1 }}>
+              <span className="material-symbols-rounded text-[18px]">save</span>
+              {saving ? 'Guardando…' : 'Guardar encuesta'}
+            </button>
+          )}
         </div>
 
       </div>
+      </div>
     </div>
+    </StepColorCtx.Provider>
   );
 }
