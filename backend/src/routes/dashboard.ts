@@ -194,7 +194,7 @@ router.get('/doctor', requireRole('DOCTOR', 'ADMIN'), async (req: AuthRequest, r
   const doctorId = req.user!.id;
 
   const monthStart = startOfMonth();
-  const [todays, tomorrows, lastRx, stats, citasMes, totalPacientes, proximaCita] = await Promise.all([
+  const [todays, tomorrows, lastRx, stats, citasMes, totalPacientes, proximaCita, recentPatients, recentAppointments] = await Promise.all([
     prisma.appointment.findMany({ where: { doctorId, date: { gte: today, lt: tomorrow }, source: 'MANUAL' }, include: { patient: true }, orderBy: { date: 'asc' } }),
     prisma.appointment.findMany({ where: { doctorId, date: { gte: tomorrow, lt: dayAfter }, source: 'MANUAL' }, include: { patient: true }, orderBy: { date: 'asc' }, take: 3 }),
     prisma.prescription.findMany({ where: { doctorId }, include: { patient: true }, orderBy: { issuedAt: 'desc' }, take: 5 }),
@@ -205,10 +205,17 @@ router.get('/doctor', requireRole('DOCTOR', 'ADMIN'), async (req: AuthRequest, r
     ]).then(([manual, batches]) => manual + batches),
     prisma.patient.count(),
     prisma.appointment.findFirst({ where: { doctorId, date: { gte: new Date() }, status: { notIn: ['CANCELADA', 'NO_ASISTIO'] } }, orderBy: { date: 'asc' }, include: { patient: true, batch: { include: { company: true } } } }),
+    prisma.patient.findMany({ where: { createdAt: { gte: today, lt: tomorrow } }, orderBy: { createdAt: 'desc' }, take: 50 }),
+    prisma.appointment.findMany({ where: { doctorId, createdAt: { gte: today, lt: tomorrow } }, include: { patient: true }, orderBy: { createdAt: 'desc' }, take: 50 }),
   ]);
 
   const counts = { AGENDADA: 0, CONFIRMADA: 0, EN_CONSULTA: 0, ATENDIDA: 0, CANCELADA: 0, NO_ASISTIO: 0 };
   stats.forEach((s) => { (counts as any)[s.status] = s._count; });
+
+  const activities = [
+    ...recentPatients.map(p => ({ type: 'NEW_PATIENT', date: p.createdAt, title: 'Nuevo paciente registrado', subtitle: p.fullName })),
+    ...recentAppointments.map(a => ({ type: 'NEW_APPOINTMENT', date: a.createdAt, title: 'Cita agendada', subtitle: a.patient?.fullName || 'Paciente empresarial' })),
+  ].sort((a, b) => b.date.getTime() - a.date.getTime());
 
   res.json({
     todays,
@@ -223,6 +230,7 @@ router.get('/doctor', requireRole('DOCTOR', 'ADMIN'), async (req: AuthRequest, r
     citasMes,
     totalPacientes,
     proximaCita,
+    activities,
   });
 });
 

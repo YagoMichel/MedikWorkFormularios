@@ -1,10 +1,10 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../services/api';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../../stores/auth';
 import toast from 'react-hot-toast';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Eye, ArrowDown, HeartPulse, Droplet, FlaskConical, Baby, Stethoscope, Activity, Bone } from 'lucide-react';
 import { SurveyEditorForm } from '../../components/SurveyEditorForm';
 
 export default function PatientDetail() {
@@ -113,13 +113,13 @@ const EMPTY_EXAM = {
   agudezaVisual: { od: { ...EMPTY_AV }, oi: { ...EMPTY_AV }, ambos: { ...EMPTY_AV }, cercana: { ...EMPTY_AV } },
   opcionesLentes: { seguridad: false, usoDiario: false, ambos: false, actualizacion: false, fotosensible: false, cirugias: '', astigmatismo: false, miopia: false, hipermetropia: false, presbicia: false, pterigionOd: '', pterigionOi: '', lubricante: '', campimetria: '', campimetriaAst: '', rejilla: '', ishihara: '', errores: '', haceUsoLentes: '', ultimaActualizacion: '', otros: '' },
   signosVitales: { peso: '', talla: '', imc: '', ta: '', fc: '', fr: '', temperatura: '', sao2: '', cintura: '', cadera: '', torax: '', imcClasificacion: '' },
-  antGineco: { menarca: '', fum: '', ritmo: '', ivs: '', g: '', p: '', c: '', a: '', fup: '', mpf: '', pap: '', its: '', otros: '' },
-  antAndro: { espermaquia: '', ivs: '', hijosMujeres: '', hijosHombres: '', mpf: '', psa: '', its: '', otros: '' },
+  antGineco: { menarca: '', fum: '', ritmo: '', ivs: '', g: '', p: '', c: '', a: '', fup: '', mpf: '', its: '', otros: '' },
+  antAndro: { hijos: '', hijosMujeres: '', hijosHombres: '', ivs: '', mpf: '', its: '', otros: '' },
   riesgoCardio: { hdl: '', colesterol: '', edadCv: '', porcentajeRiesgo: '', riesgo: '' },
   examenes: { audiometria: '', espirometria: '', otoscopia: '', dientes: '', otros: '', tiempo: '' },
   ruffier: { reposoP: '', reposoR: '', esfuerzoP: '', esfuerzoR: '', minutoP: '', minutoR: '', calificacion: '' },
   rayosX: { ic: '', anterior: '', sagital: '', ferguson: '', lordotico: '', coob: '', dismetria: '', l3: '', hallazgos: '' },
-  recibeRadiografias: false, fechaRadiografias: '', indicacionesConocidas: false, notas: '',
+  recibeRadiografias: '', fechaRadiografias: '', indicacionesConocidas: false, notas: '',
 };
 
 function MedicalExamForm({ initial, onSave }: { initial?: any; onSave: (d: any) => void }) {
@@ -132,9 +132,64 @@ function MedicalExamForm({ initial, onSave }: { initial?: any; onSave: (d: any) 
     antAndro: { ...EMPTY_EXAM.antAndro, ...(initial.antAndro || {}) },
     riesgoCardio: { ...EMPTY_EXAM.riesgoCardio, ...(initial.riesgoCardio || {}) },
     examenes: { ...EMPTY_EXAM.examenes, ...(initial.examenes || {}) },
-    ruffier: { ...EMPTY_EXAM.ruffier, ...(initial.ruffier || {}) },
     rayosX: { ...EMPTY_EXAM.rayosX, ...(initial.rayosX || {}) },
   } : EMPTY_EXAM);
+
+  const [genderTab, setGenderTab] = useState<'F' | 'M'>('F');
+
+  useEffect(() => {
+    const peso = parseFloat(f.signosVitales.peso);
+    const talla = parseFloat(f.signosVitales.talla);
+    if (peso > 0 && talla > 0) {
+      const imcVal = peso / (talla * talla);
+      let clasificacion = '';
+      if (imcVal < 18.5) clasificacion = 'Bajo peso';
+      else if (imcVal < 25) clasificacion = 'Peso normal';
+      else if (imcVal < 30) clasificacion = 'Sobrepeso';
+      else if (imcVal < 35) clasificacion = 'Obesidad I';
+      else if (imcVal < 40) clasificacion = 'Obesidad II';
+      else if (imcVal < 50) clasificacion = 'Obesidad III';
+      else clasificacion = 'Obesidad IV';
+
+      if (f.signosVitales.imc !== imcVal.toFixed(1) || f.signosVitales.imcClasificacion !== clasificacion) {
+        setF((prev: any) => ({
+          ...prev,
+          signosVitales: {
+            ...prev.signosVitales,
+            imc: imcVal.toFixed(1),
+            imcClasificacion: clasificacion
+          }
+        }));
+      }
+    } else if (!f.signosVitales.peso || !f.signosVitales.talla) {
+      if (f.signosVitales.imc !== '' || f.signosVitales.imcClasificacion !== '') {
+        setF((prev: any) => ({
+          ...prev,
+          signosVitales: {
+            ...prev.signosVitales,
+            imc: '',
+            imcClasificacion: ''
+          }
+        }));
+      }
+    }
+  }, [f.signosVitales.peso, f.signosVitales.talla, f.signosVitales.imc, f.signosVitales.imcClasificacion]);
+
+  useEffect(() => {
+    const p1 = parseFloat(f.ruffier.reposoP);
+    const p2 = parseFloat(f.ruffier.esfuerzoP);
+    const p3 = parseFloat(f.ruffier.minutoP);
+    if (!isNaN(p1) && !isNaN(p2) && !isNaN(p3)) {
+      const calc = ((p1 + p2 + p3) - 200) / 10;
+      if (f.ruffier.calificacion !== calc.toFixed(1)) {
+        setF((prev: any) => ({ ...prev, ruffier: { ...prev.ruffier, calificacion: calc.toFixed(1) } }));
+      }
+    } else {
+      if (f.ruffier.calificacion !== '') {
+        setF((prev: any) => ({ ...prev, ruffier: { ...prev.ruffier, calificacion: '' } }));
+      }
+    }
+  }, [f.ruffier.reposoP, f.ruffier.esfuerzoP, f.ruffier.minutoP, f.ruffier.calificacion]);
 
   const set = (section: string, key: string, val: any) =>
     setF((prev: any) => ({ ...prev, [section]: { ...prev[section], [key]: val } }));
@@ -143,19 +198,30 @@ function MedicalExamForm({ initial, onSave }: { initial?: any; onSave: (d: any) 
     <input className="input text-xs" placeholder={placeholder || key} value={(f[section] as any)[key] || ''} onChange={(e) => set(section, key, e.target.value)} />
   );
   const chk = (section: string, key: string, label: string) => (
-    <label className="flex items-center gap-1 text-xs cursor-pointer">
-      <input type="checkbox" checked={(f[section] as any)[key] || false} onChange={(e) => set(section, key, e.target.checked)} />
-      {label}
-    </label>
+    <div className="flex flex-col gap-1">
+      <label className="text-sm font-medium invisible hidden md:block">_</label>
+      <label className="flex items-center gap-2 text-sm font-medium cursor-pointer h-[38px]" style={{ color: 'var(--text-muted)' }}>
+        <input type="checkbox" className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500" checked={(f[section] as any)[key] || false} onChange={(e) => set(section, key, e.target.checked)} />
+        {label}
+      </label>
+    </div>
   );
 
-  const avRow = (eye: string, label: string) => (
-    <tr>
-      <td className="px-2 py-1 font-semibold text-xs uppercase">{label}</td>
-      <td className="px-1 py-1"><input className="input text-xs" value={(f.agudezaVisual as any)[eye]?.sinLentes || ''} onChange={(e) => setF((p: any) => ({ ...p, agudezaVisual: { ...p.agudezaVisual, [eye]: { ...p.agudezaVisual[eye], sinLentes: e.target.value } } }))} /></td>
-      <td className="px-1 py-1"><input className="input text-xs" value={(f.agudezaVisual as any)[eye]?.conLentes || ''} onChange={(e) => setF((p: any) => ({ ...p, agudezaVisual: { ...p.agudezaVisual, [eye]: { ...p.agudezaVisual[eye], conLentes: e.target.value } } }))} /></td>
-      <td className="px-1 py-1"><input className="input text-xs" value={(f.agudezaVisual as any)[eye]?.recuperacion || ''} onChange={(e) => setF((p: any) => ({ ...p, agudezaVisual: { ...p.agudezaVisual, [eye]: { ...p.agudezaVisual[eye], recuperacion: e.target.value } } }))} /></td>
-    </tr>
+  const inpLabeled = (section: string, key: string, label: string, placeholder?: string, type: string = 'text') => (
+    <div className="flex flex-col gap-1 min-w-0">
+      <label className="text-sm font-medium truncate" style={{ color: 'var(--text-muted)' }}>{label}</label>
+      <input type={type} className="input min-w-0" placeholder={placeholder} value={(f[section] as any)[key] || ''} onChange={(e) => set(section, key, e.target.value)} />
+    </div>
+  );
+
+  const selLabeled = (section: string, key: string, label: string, options: string[]) => (
+    <div className="flex flex-col gap-1 min-w-0">
+      <label className="text-sm font-medium truncate" style={{ color: 'var(--text-muted)' }}>{label}</label>
+      <select className="input min-w-0 bg-white dark:bg-slate-800" value={(f[section] as any)[key] || ''} onChange={(e) => set(section, key, e.target.value)}>
+        <option value="">Seleccionar...</option>
+        {options.map(o => <option key={o} value={o}>{o}</option>)}
+      </select>
+    </div>
   );
 
   const IMC_OPTS = ['Bajo peso', 'Peso normal', 'Sobrepeso', 'Obesidad I', 'Obesidad II', 'Obesidad III', 'Obesidad IV'];
@@ -169,190 +235,283 @@ function MedicalExamForm({ initial, onSave }: { initial?: any; onSave: (d: any) 
 
       {/* AGUDEZA VISUAL */}
       <div className="card">
-        <h4 className="card-title text-primary-600 uppercase text-xs tracking-wider mb-3">Agudeza visual</h4>
-        <div className="overflow-x-auto">
-          <table className="tbl w-full">
-            <thead><tr>
-              <th></th>
-              <th className="text-center">Sin lentes</th>
-              <th className="text-center">Con lentes</th>
-              <th className="text-center">Recuperación</th>
-            </tr></thead>
-            <tbody>
-              {avRow('od', 'Derecho')}
-              {avRow('oi', 'Izquierdo')}
-              {avRow('ambos', 'Ambos ojos')}
-              {avRow('cercana', 'Cercana')}
-            </tbody>
-          </table>
+        <h4 className="flex items-center gap-2 card-title text-base font-bold mb-5" style={{ color: 'var(--text-normal, #1e293b)' }}>
+          <Eye size={20} className="text-blue-500" />
+          Agudeza visual
+        </h4>
+        <div className="grid grid-cols-[100px_1fr_1fr_1fr] md:grid-cols-[120px_1fr_1fr_1fr] gap-x-4 gap-y-3 items-center mb-6">
+          <div className="col-start-2 text-center text-sm font-medium" style={{ color: 'var(--text-muted)' }}>Sin lentes</div>
+          <div className="text-center text-sm font-medium" style={{ color: 'var(--text-muted)' }}>Con lentes</div>
+          <div className="text-center text-sm font-medium" style={{ color: 'var(--text-muted)' }}>Recuperación</div>
+
+          <div className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>Derecho</div>
+          <input className="input" value={(f.agudezaVisual as any)['od']?.sinLentes || ''} onChange={(e) => setF((p: any) => ({ ...p, agudezaVisual: { ...p.agudezaVisual, od: { ...p.agudezaVisual.od, sinLentes: e.target.value } } }))} />
+          <input className="input" value={(f.agudezaVisual as any)['od']?.conLentes || ''} onChange={(e) => setF((p: any) => ({ ...p, agudezaVisual: { ...p.agudezaVisual, od: { ...p.agudezaVisual.od, conLentes: e.target.value } } }))} />
+          <input className="input" value={(f.agudezaVisual as any)['od']?.recuperacion || ''} onChange={(e) => setF((p: any) => ({ ...p, agudezaVisual: { ...p.agudezaVisual, od: { ...p.agudezaVisual.od, recuperacion: e.target.value } } }))} />
+
+          <div className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>Izquierdo</div>
+          <input className="input" value={(f.agudezaVisual as any)['oi']?.sinLentes || ''} onChange={(e) => setF((p: any) => ({ ...p, agudezaVisual: { ...p.agudezaVisual, oi: { ...p.agudezaVisual.oi, sinLentes: e.target.value } } }))} />
+          <input className="input" value={(f.agudezaVisual as any)['oi']?.conLentes || ''} onChange={(e) => setF((p: any) => ({ ...p, agudezaVisual: { ...p.agudezaVisual, oi: { ...p.agudezaVisual.oi, conLentes: e.target.value } } }))} />
+          <input className="input" value={(f.agudezaVisual as any)['oi']?.recuperacion || ''} onChange={(e) => setF((p: any) => ({ ...p, agudezaVisual: { ...p.agudezaVisual, oi: { ...p.agudezaVisual.oi, recuperacion: e.target.value } } }))} />
+
+          <div className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>Ambos ojos</div>
+          <input className="input" value={(f.agudezaVisual as any)['ambos']?.sinLentes || ''} onChange={(e) => setF((p: any) => ({ ...p, agudezaVisual: { ...p.agudezaVisual, ambos: { ...p.agudezaVisual.ambos, sinLentes: e.target.value } } }))} />
+          <input className="input" value={(f.agudezaVisual as any)['ambos']?.conLentes || ''} onChange={(e) => setF((p: any) => ({ ...p, agudezaVisual: { ...p.agudezaVisual, ambos: { ...p.agudezaVisual.ambos, conLentes: e.target.value } } }))} />
+          <input className="input" value={(f.agudezaVisual as any)['ambos']?.recuperacion || ''} onChange={(e) => setF((p: any) => ({ ...p, agudezaVisual: { ...p.agudezaVisual, ambos: { ...p.agudezaVisual.ambos, recuperacion: e.target.value } } }))} />
+
+          <div className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>Cercana</div>
+          <input className="input" value={(f.agudezaVisual as any)['cercana']?.sinLentes || ''} onChange={(e) => setF((p: any) => ({ ...p, agudezaVisual: { ...p.agudezaVisual, cercana: { ...p.agudezaVisual.cercana, sinLentes: e.target.value } } }))} />
+          <input className="input" value={(f.agudezaVisual as any)['cercana']?.conLentes || ''} onChange={(e) => setF((p: any) => ({ ...p, agudezaVisual: { ...p.agudezaVisual, cercana: { ...p.agudezaVisual.cercana, conLentes: e.target.value } } }))} />
+          <input className="input" value={(f.agudezaVisual as any)['cercana']?.recuperacion || ''} onChange={(e) => setF((p: any) => ({ ...p, agudezaVisual: { ...p.agudezaVisual, cercana: { ...p.agudezaVisual.cercana, recuperacion: e.target.value } } }))} />
         </div>
-        <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2">
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           {chk('opcionesLentes', 'seguridad', 'Seguridad')}
           {chk('opcionesLentes', 'usoDiario', 'Uso diario')}
           {chk('opcionesLentes', 'ambos', 'Ambos')}
           {chk('opcionesLentes', 'actualizacion', 'Actualización')}
           {chk('opcionesLentes', 'fotosensible', 'Fotosensible')}
+          <div className="col-span-2 md:col-span-3">
+            {inpLabeled('opcionesLentes', 'cirugias', 'Cirugías')}
+          </div>
           {chk('opcionesLentes', 'astigmatismo', 'Astigmatismo')}
           {chk('opcionesLentes', 'miopia', 'Miopía')}
           {chk('opcionesLentes', 'hipermetropia', 'Hipermetropía')}
           {chk('opcionesLentes', 'presbicia', 'Presbicia')}
         </div>
-        <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2">
-          {inp('opcionesLentes', 'cirugias', 'Cirugías')}
-          {inp('opcionesLentes', 'pterigionOd', 'Pterigion OD')}
-          {inp('opcionesLentes', 'pterigionOi', 'Pterigion OI')}
-          {inp('opcionesLentes', 'lubricante', 'Lubricante')}
-          {inp('opcionesLentes', 'campimetria', 'Campimetría')}
-          {inp('opcionesLentes', 'campimetriaAst', 'Campimetría *')}
-          {inp('opcionesLentes', 'rejilla', 'Rejilla')}
-          {inp('opcionesLentes', 'ishihara', 'Ishihara')}
-          {inp('opcionesLentes', 'errores', 'Errores')}
-          {inp('opcionesLentes', 'haceUsoLentes', '¿Hace cuánto usa lentes?')}
-          {inp('opcionesLentes', 'ultimaActualizacion', 'Última actualización')}
-          {inp('opcionesLentes', 'otros', 'Otros')}
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-x-6 gap-y-5 mb-4">
+          {inpLabeled('opcionesLentes', 'pterigionOd', 'Pterigion OD')}
+          {inpLabeled('opcionesLentes', 'pterigionOi', 'Pterigion OI')}
+          {inpLabeled('opcionesLentes', 'lubricante', 'Lubricante')}
+
+          <div className="flex flex-col gap-1 md:col-span-2">
+            <label className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>Campimetría</label>
+            <div className="flex items-center gap-2">
+              <input className="input w-full" value={f.opcionesLentes.campimetria || ''} onChange={(e) => set('opcionesLentes', 'campimetria', e.target.value)} />
+              <span className="text-slate-400 font-bold px-1">*</span>
+              <input className="input w-full" value={f.opcionesLentes.campimetriaAst || ''} onChange={(e) => set('opcionesLentes', 'campimetriaAst', e.target.value)} />
+            </div>
+          </div>
+
+          {inpLabeled('opcionesLentes', 'rejilla', 'Rejilla')}
+
+          {inpLabeled('opcionesLentes', 'ishihara', 'Ishihara')}
+          {inpLabeled('opcionesLentes', 'errores', 'Errores', '0/25')}
+          {inpLabeled('opcionesLentes', 'haceUsoLentes', 'Hace cuánto usa lentes')}
+
+          <div className="flex flex-col gap-1">
+            <label className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>Última actualización</label>
+            <input className="input text-sm" type="date" value={f.opcionesLentes.ultimaActualizacion || ''} onChange={(e) => set('opcionesLentes', 'ultimaActualizacion', e.target.value)} />
+          </div>
+
+          <div className="flex flex-col gap-1 md:col-span-2">
+            <div className="flex items-center gap-2 mb-1">
+              <label className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>Otros</label>
+              <span className="w-5 h-5 flex items-center justify-center rounded-full border border-slate-300" style={{ color: 'var(--text-muted)' }}>
+                <ArrowDown size={12} />
+              </span>
+            </div>
+            <textarea className="input" rows={2} value={f.opcionesLentes.otros || ''} onChange={(e) => set('opcionesLentes', 'otros', e.target.value)}></textarea>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start mb-4">
         {/* SIGNOS VITALES */}
-        <div className="card">
-          <h4 className="card-title text-primary-600 uppercase text-xs tracking-wider mb-3">Signos vitales</h4>
-          <div className="grid grid-cols-2 gap-2">
-            {['peso','talla','imc','ta','fc','fr','temperatura','sao2','cintura','cadera','torax'].map((k) => (
-              <div key={k}>
-                <label className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>{k.toUpperCase()}</label>
-                {inp('signosVitales', k, '')}
-              </div>
-            ))}
+        <div className="card min-w-0">
+          <h4 className="card-title text-primary-600 uppercase text-xs tracking-wider mb-4 flex items-center gap-2">
+            <HeartPulse size={16} /> Signos vitales
+          </h4>
+
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+            {inpLabeled('signosVitales', 'peso', 'Peso (kg)')}
+            {inpLabeled('signosVitales', 'talla', 'Talla (m)')}
+            {inpLabeled('signosVitales', 'ta', 'TA (mmHg)')}
+            {inpLabeled('signosVitales', 'fc', 'FC (lpm)')}
+            {inpLabeled('signosVitales', 'fr', 'FR (rpm)')}
+
+            {inpLabeled('signosVitales', 'temperatura', 'Tº (ºC)')}
+            {inpLabeled('signosVitales', 'sao2', 'SaO2 (%)')}
+            {inpLabeled('signosVitales', 'cintura', 'Cintura (cm)')}
+            {inpLabeled('signosVitales', 'cadera', 'Cadera (cm)')}
+            {inpLabeled('signosVitales', 'torax', 'Tórax (cm)')}
           </div>
-          <div className="mt-3">
-            <label className="text-[10px] uppercase tracking-wide block mb-1" style={{ color: 'var(--text-muted)' }}>IMC Clasificación</label>
-            <select className="input text-xs" value={f.signosVitales.imcClasificacion} onChange={(e) => set('signosVitales', 'imcClasificacion', e.target.value)}>
-              <option value="">—</option>
-              {IMC_OPTS.map((o) => <option key={o} value={o}>{o}</option>)}
-            </select>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-slate-50 rounded-lg p-3 flex flex-col justify-center border border-slate-200">
+              <label className="text-[11px] text-slate-500 mb-0.5 block font-medium">IMC (calculado)</label>
+              <div className="text-2xl font-bold text-slate-800">{f.signosVitales.imc || '—'}</div>
+            </div>
+            <div className="bg-slate-50 rounded-lg p-3 flex flex-col justify-center border border-slate-200">
+              <label className="text-[11px] text-slate-500 mb-0.5 block font-medium">Clasificación (auto)</label>
+              <div className="text-lg font-semibold text-primary-600 dark:text-blue-400">{f.signosVitales.imcClasificacion || '—'}</div>
+            </div>
           </div>
         </div>
 
         {/* RIESGO CARDIOVASCULAR */}
-        <div className="card">
-          <h4 className="card-title text-primary-600 uppercase text-xs tracking-wider mb-3">Riesgo cardiovascular</h4>
-          <div className="space-y-2">
-            {[['hdl','HDL'],['colesterol','Colesterol'],['edadCv','Edad CV'],['porcentajeRiesgo','% Riesgo'],['riesgo','Riesgo']].map(([k, l]) => (
-              <div key={k} className="flex items-center gap-2">
-                <label className="text-xs w-28 shrink-0">{l}</label>
-                <input className="input text-xs" value={(f.riesgoCardio as any)[k] || ''} onChange={(e) => set('riesgoCardio', k, e.target.value)} />
-              </div>
-            ))}
+        <div className="card min-w-0">
+          <h4 className="card-title text-primary-600 uppercase text-xs tracking-wider mb-4 flex items-center gap-2">
+            <Droplet size={16} /> Riesgo cardiovascular
+          </h4>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+            {inpLabeled('riesgoCardio', 'hdl', 'HDL')}
+            {inpLabeled('riesgoCardio', 'colesterol', 'Colesterol')}
+            {inpLabeled('riesgoCardio', 'edadCv', 'Edad CV')}
+            {inpLabeled('riesgoCardio', 'porcentajeRiesgo', '% Riesgo')}
+            {inpLabeled('riesgoCardio', 'riesgo', 'Riesgo')}
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* ANTECEDENTES GINECO */}
-        <div className="card">
-          <h4 className="card-title text-primary-600 uppercase text-xs tracking-wider mb-3">Antecedentes gineco-obstétricos</h4>
-          <div className="grid grid-cols-2 gap-2">
-            {[['menarca','Menarca'],['fum','FUM'],['ritmo','Ritmo'],['ivs','IVS'],['g','G'],['p','P'],['c','C'],['a','A'],['fup','FUP'],['mpf','MPF'],['pap','PAP'],['its','ITS'],['otros','Otros']].map(([k, l]) => (
-              <div key={k}>
-                <label className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>{l}</label>
-                {inp('antGineco', k, '')}
-              </div>
-            ))}
-          </div>
+      {/* ANTECEDENTES GINECO / ANDRO */}
+      <div className="card mb-4 min-w-0">
+        <h4 className="card-title text-primary-600 uppercase text-xs tracking-wider mb-4 flex items-center gap-2">
+          <Baby size={16} /> Antecedentes gineco-obstétricos / andrológicos
+        </h4>
+
+        <div className="flex items-center gap-6 mb-6">
+          <label className="flex items-center gap-2 text-sm font-medium cursor-pointer text-slate-800 dark:text-slate-200">
+            <input type="radio" name="genderTab" value="F" checked={genderTab === 'F'} onChange={() => setGenderTab('F')} className="w-4 h-4 text-primary-600 focus:ring-primary-500 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-600" />
+            Mujer
+          </label>
+          <label className="flex items-center gap-2 text-sm font-medium cursor-pointer text-slate-800 dark:text-slate-200">
+            <input type="radio" name="genderTab" value="M" checked={genderTab === 'M'} onChange={() => setGenderTab('M')} className="w-4 h-4 text-primary-600 focus:ring-primary-500 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-600" />
+            Hombre
+          </label>
         </div>
 
-        {/* ANTECEDENTES ANDROLOGICOS */}
-        <div className="card">
-          <h4 className="card-title text-primary-600 uppercase text-xs tracking-wider mb-3">Antecedentes andrológicos</h4>
-          <div className="grid grid-cols-2 gap-2">
-            {[['espermaquia','Espermaquia'],['ivs','IVS'],['hijosMujeres','Hijos mujeres'],['hijosHombres','Hijos hombres'],['mpf','MPF'],['psa','PSA'],['its','ITS'],['otros','Otros']].map(([k, l]) => (
-              <div key={k}>
-                <label className="text-[10px] uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>{l}</label>
-                {inp('antAndro', k, '')}
-              </div>
-            ))}
+        {genderTab === 'F' && (
+          <div>
+            <h5 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-4">Gineco-obstétricos</h5>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+              {inpLabeled('antGineco', 'menarca', 'Menarca')}
+              {inpLabeled('antGineco', 'fum', 'FUM', '', 'date')}
+              {inpLabeled('antGineco', 'ritmo', 'Ritmo')}
+              {inpLabeled('antGineco', 'ivs', 'IVS')}
+
+              {inpLabeled('antGineco', 'g', 'G')}
+              {inpLabeled('antGineco', 'p', 'P')}
+              {inpLabeled('antGineco', 'c', 'C')}
+              {inpLabeled('antGineco', 'a', 'A')}
+
+              {inpLabeled('antGineco', 'fup', 'FUP', '', 'date')}
+              {inpLabeled('antGineco', 'mpf', 'MPF')}
+              {inpLabeled('antGineco', 'its', 'ITS')}
+            </div>
+            <div className="grid grid-cols-1 gap-4">
+              {inpLabeled('antGineco', 'otros', 'Otros')}
+            </div>
           </div>
-        </div>
+        )}
+
+        {genderTab === 'M' && (
+          <div>
+            <h5 className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-4">Andrológicos</h5>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
+              {inpLabeled('antAndro', 'hijos', 'Hijos')}
+              {inpLabeled('antAndro', 'hijosMujeres', 'Mujeres')}
+              {inpLabeled('antAndro', 'hijosHombres', 'Hombres')}
+
+              {inpLabeled('antAndro', 'ivs', 'IVS')}
+              {inpLabeled('antAndro', 'mpf', 'MPF')}
+              {inpLabeled('antAndro', 'its', 'ITS')}
+            </div>
+            <div className="grid grid-cols-1 gap-4">
+              {inpLabeled('antAndro', 'otros', 'Otros')}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* EXAMENES */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="card">
-          <h4 className="card-title text-primary-600 uppercase text-xs tracking-wider mb-3">Exámenes</h4>
-          <div className="space-y-2">
-            {[['audiometria','Audiometría'],['espirometria','Espirometría'],['otoscopia','Otoscopía'],['dientes','Dientes'],['otros','Otros'],['tiempo','Tiempo']].map(([k, l]) => (
-              <div key={k} className="flex items-center gap-2">
-                <label className="text-xs w-28 shrink-0">{l}</label>
-                <input className="input text-xs" value={(f.examenes as any)[k] || ''} onChange={(e) => set('examenes', k, e.target.value)} />
-              </div>
-            ))}
+        <div className="card min-w-0">
+          <h4 className="card-title text-primary-600 uppercase text-xs tracking-wider mb-4 flex items-center gap-2">
+            <Stethoscope size={16} /> Exploración complementaria
+          </h4>
+          <div className="grid grid-cols-1 gap-4">
+            {inpLabeled('examenes', 'audiometria', 'Audiometría')}
+            {selLabeled('examenes', 'espirometria', 'Espirometría', ['A — Normal', 'B', 'C', 'D', 'E — Obstructivo', 'Restrictivo'])}
+            {inpLabeled('examenes', 'otoscopia', 'Otoscopía')}
+            {inpLabeled('examenes', 'dientes', 'Dientes')}
+            {inpLabeled('examenes', 'tiempo', 'Tiempo')}
+            {inpLabeled('examenes', 'otros', 'Otros')}
           </div>
         </div>
 
         {/* PRUEBA RUFFIER */}
-        <div className="card">
-          <h4 className="card-title text-primary-600 uppercase text-xs tracking-wider mb-3">Prueba Ruffier y Dickson</h4>
-          <table className="tbl w-full">
-            <thead><tr><th>Momento</th><th className="text-center">Pulso</th><th className="text-center">Respiración</th></tr></thead>
-            <tbody>
-              {[['reposo','En reposo'],['esfuerzo','Inmediatamente después'],['minuto','1 min. después']].map(([k, l]) => (
-                <tr key={k}>
-                  <td className="text-xs">{l}</td>
-                  <td className="px-1"><input className="input text-xs" value={(f.ruffier as any)[`${k}P`] || ''} onChange={(e) => set('ruffier', `${k}P`, e.target.value)} /></td>
-                  <td className="px-1"><input className="input text-xs" value={(f.ruffier as any)[`${k}R`] || ''} onChange={(e) => set('ruffier', `${k}R`, e.target.value)} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="mt-2 flex items-center gap-2">
-            <label className="text-xs">Calificación</label>
-            <input className="input text-xs" value={f.ruffier.calificacion || ''} onChange={(e) => set('ruffier', 'calificacion', e.target.value)} />
+        <div className="card min-w-0">
+          <h4 className="card-title text-primary-600 uppercase text-xs tracking-wider mb-4 flex items-center gap-2">
+            <Activity size={16} /> Prueba de Ruffier y Dickson
+          </h4>
+          <div className="grid grid-cols-[1fr_1fr_1fr] gap-4 mb-2 text-xs font-bold text-slate-500">
+            <div>Momento</div>
+            <div className="text-center">Pulso</div>
+            <div className="text-center">Respiración</div>
+          </div>
+          <div className="space-y-2 mb-6">
+            {[['reposo', 'En reposo'], ['esfuerzo', 'Post-esfuerzo'], ['minuto', '1 min. después']].map(([k, l]) => (
+              <div key={k} className="grid grid-cols-[1fr_1fr_1fr] gap-4 items-center">
+                <div className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>{l}</div>
+                <div>
+                  <input type="number" className="input text-center font-medium" value={(f.ruffier as any)[`${k}P`] || ''} onChange={(e) => set('ruffier', `${k}P`, e.target.value)} />
+                </div>
+                <div>
+                  <input type="text" className="input text-center" value={(f.ruffier as any)[`${k}R`] || ''} onChange={(e) => set('ruffier', `${k}R`, e.target.value)} />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-slate-50 dark:bg-[#141414] rounded-lg p-4 flex flex-col justify-center border border-slate-200 dark:border-[#2a2a2a]">
+            <label className="text-[11px] text-slate-500 dark:text-slate-400 mb-1 block font-medium">Calificación (calculada)</label>
+            <div className="text-2xl font-bold text-slate-800 dark:text-white">{f.ruffier.calificacion || '—'}</div>
           </div>
         </div>
       </div>
 
       {/* RAYOS X */}
-      <div className="card">
-        <h4 className="card-title text-primary-600 uppercase text-xs tracking-wider mb-3">Rayos X</h4>
-        <div className="overflow-x-auto">
-          <table className="tbl w-full">
-            <thead><tr>
-              {['IC','Anterior','Sagital','Fergusón','Lordótico','COOB','Dismetría','L3'].map((h) => <th key={h} className="text-center text-[10px]">{h}</th>)}
-            </tr></thead>
-            <tbody><tr>
-              {['ic','anterior','sagital','ferguson','lordotico','coob','dismetria','l3'].map((k) => (
-                <td key={k} className="px-1 py-1"><input className="input text-xs w-16" value={(f.rayosX as any)[k] || ''} onChange={(e) => set('rayosX', k, e.target.value)} /></td>
-              ))}
-            </tr></tbody>
-          </table>
+      <div className="card min-w-0 mb-4">
+        <h4 className="card-title text-primary-600 uppercase text-xs tracking-wider mb-4 flex items-center gap-2">
+          <Bone size={16} /> Rayos X
+        </h4>
+        <div className="grid grid-cols-2 md:grid-cols-8 gap-4 mb-4">
+          {inpLabeled('rayosX', 'ic', 'IC')}
+          {inpLabeled('rayosX', 'anterior', 'Anterior')}
+          {inpLabeled('rayosX', 'sagital', 'Sagital')}
+          {inpLabeled('rayosX', 'ferguson', 'Fergusón')}
+          {inpLabeled('rayosX', 'lordotico', 'Lordótico')}
+
+          {inpLabeled('rayosX', 'coob', 'Coob')}
+          {inpLabeled('rayosX', 'dismetria', 'Dismetría')}
+          {inpLabeled('rayosX', 'l3', 'L3')}
         </div>
-        <div className="mt-2">
-          <label className="text-xs block mb-1">Hallazgos</label>
-          <input className="input text-xs" value={f.rayosX.hallazgos || ''} onChange={(e) => set('rayosX', 'hallazgos', e.target.value)} />
+
+        <div className="flex flex-col gap-1 mb-6">
+          <label className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>Hallazgos</label>
+          <textarea className="input min-w-0 h-24 resize-none" value={f.rayosX.hallazgos || ''} onChange={(e) => set('rayosX', 'hallazgos', e.target.value)} />
+        </div>
+
+        <div className="flex flex-col md:flex-row items-center gap-6">
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <label className="text-sm font-medium whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>Recibo radiografías impresas</label>
+            <input type="text" className="input w-full md:w-64" value={typeof f.recibeRadiografias === 'boolean' ? '' : f.recibeRadiografias || ''} onChange={(e) => setF((p: any) => ({ ...p, recibeRadiografias: e.target.value }))} />
+          </div>
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            <label className="text-sm font-medium whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>Fecha</label>
+            <input type="date" className="input w-full md:w-48" value={f.fechaRadiografias || ''} onChange={(e) => setF((p: any) => ({ ...p, fechaRadiografias: e.target.value }))} />
+          </div>
         </div>
       </div>
 
       {/* FOOTER */}
       <div className="card space-y-3">
-        <div className="flex items-center gap-3 flex-wrap">
-          <label className="flex items-center gap-2 text-sm cursor-pointer">
-            <input type="checkbox" checked={f.recibeRadiografias || false} onChange={(e) => setF((p: any) => ({ ...p, recibeRadiografias: e.target.checked }))} />
-            Recibo radiografías impresas
-          </label>
-          <div className="flex items-center gap-2">
-            <label className="text-xs">Fecha</label>
-            <input className="input text-xs w-36" type="date" value={f.fechaRadiografias || ''} onChange={(e) => setF((p: any) => ({ ...p, fechaRadiografias: e.target.value }))} />
-          </div>
-        </div>
         <label className="flex items-center gap-2 text-sm cursor-pointer">
           <input type="checkbox" checked={f.indicacionesConocidas || false} onChange={(e) => setF((p: any) => ({ ...p, indicacionesConocidas: e.target.checked }))} />
-          Se me dieron a conocer las indicaciones antes de acudir al examen médico
+          Se me dieron a conocer las indicaciones antes de acudir al examen médico por parte de la empresa de procedencia
         </label>
-        <div>
-          <label className="text-xs block mb-1">Notas adicionales</label>
-          <textarea className="input text-xs" rows={2} value={f.notas || ''} onChange={(e) => setF((p: any) => ({ ...p, notas: e.target.value }))} />
-        </div>
         <div className="flex justify-end">
           <button onClick={() => onSave(f)} className="btn btn-primary">Guardar resultados</button>
         </div>

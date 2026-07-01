@@ -39,8 +39,6 @@ router.post('/', async (req: AuthRequest, res) => {
   res.status(201).json(batch);
 });
 
-router.use(requireRole('ADMIN'));
-
 // GET /api/batches — listar batches
 router.get('/', async (req: AuthRequest, res) => {
   const { status } = req.query as any;
@@ -53,6 +51,8 @@ router.get('/', async (req: AuthRequest, res) => {
   });
   res.json(batches);
 });
+
+router.use(requireRole('ADMIN'));
 
 // POST /api/batches/:id/confirm-admin — confirmar batch y crear citas
 router.post('/:id/confirm-admin', async (req: AuthRequest, res) => {
