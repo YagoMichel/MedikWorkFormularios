@@ -4,13 +4,14 @@ import { api } from '../../services/api';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../stores/auth';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Eye, ArrowDown, HeartPulse, Droplet, FlaskConical, Baby, Stethoscope, Activity, Bone } from 'lucide-react';
+import { ArrowLeft, Eye, ArrowDown, HeartPulse, Droplet, FlaskConical, Baby, Stethoscope, Activity, Bone, FileDown } from 'lucide-react';
 import { SurveyEditorForm } from '../../components/SurveyEditorForm';
+import { downloadSurveyPdf } from '../../utils/surveyPdf';
 
 export default function PatientDetail() {
   const { id } = useParams();
   const user = useAuth((s) => s.user);
-  const [tab, setTab] = useState<'survey' | 'results' | 'clinical' | 'sales'>('survey');
+  const [tab, setTab] = useState<'survey' | 'results' | 'clinical' | 'documentos' | 'sales'>('survey');
   const { data: p, isLoading } = useQuery({
     queryKey: ['patient', id],
     queryFn: async () => (await api.get(`/patients/${id}`)).data,
@@ -30,6 +31,7 @@ export default function PatientDetail() {
     { k: 'survey', l: 'Datos del paciente' },
     { k: 'results', l: 'Resultados' },
     { k: 'clinical', l: 'Historial clínico' },
+    { k: 'documentos', l: 'Documentos' },
   ];
   if (user?.role === 'ADMIN') tabs.push({ k: 'sales', l: 'Compras' });
 
@@ -48,6 +50,8 @@ export default function PatientDetail() {
       {tab === 'survey' && (
         <SurveyTab patientId={p.id} survey={survey} />
       )}
+
+      {tab === 'documentos' && <DocumentosTab survey={survey} patient={p} />}
 
       {tab === 'results' && <MedicalExamTab patientId={p.id} />}
 
@@ -544,5 +548,37 @@ function SurveyTab({ patientId, survey }: { patientId: string; survey: any }) {
       companies={companies}
       onSave={handleSave}
     />
+  );
+}
+
+// ── Documentos ────────────────────────────────────────────────────────
+function DocumentosTab({ survey, patient }: { survey: any; patient: any }) {
+  const [generando, setGenerando] = useState(false);
+
+  const handleClick = async () => {
+    if (!survey || generando) return;
+    setGenerando(true);
+    try {
+      await downloadSurveyPdf(survey, patient);
+    } catch {
+      toast.error('No se pudo generar el PDF');
+    } finally {
+      setGenerando(false);
+    }
+  };
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div
+        className={`card flex flex-col items-center gap-2 p-6 text-center ${survey ? 'cursor-pointer hover:shadow-md transition' : 'opacity-50'}`}
+        onClick={handleClick}
+      >
+        <FileDown size={32} className={survey ? 'text-blue-600' : 'text-slate-300'} />
+        <div className="font-semibold text-sm">Encuesta</div>
+        <div className="text-xs text-slate-400">
+          {!survey ? 'El paciente aún no tiene encuesta capturada' : generando ? 'Generando PDF…' : 'Descargar historia clínica (PDF)'}
+        </div>
+      </div>
+    </div>
   );
 }

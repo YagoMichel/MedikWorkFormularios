@@ -36,6 +36,9 @@ function loadMunicipiosDB(): Promise<MunicipiosDB | null> {
   return municipiosDBPromise;
 }
 
+// Valor centinela para buscar pacientes sin empresa asignada (particulares / sala general)
+const SIN_EMPRESA = '__sin_empresa__';
+
 const BLOOD_TYPES = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'No sé'];
 const ESCOLARIDADES = [
   'Sin estudios', 'Primaria', 'Secundaria',
@@ -474,6 +477,11 @@ const ENFERMEDADES_FAMILIARES = [
   'Problemas cardíacos', 'Enfermedades mentales', 'Sordera', 'Otras',
 ];
 const PARIENTES = ['Padre', 'Madre', 'Abuelo', 'Abuela', 'Hijo/a', 'Hermano/a', 'Otro'];
+const EXPOSICION_OPCIONES: [string, string][] = [
+  ['ruidos', 'Ruidos fuertes'], ['polvos', 'Polvos'],
+  ['vapores', 'Vapores'], ['humos', 'Humos'],
+  ['riesgoElectrico', 'Riesgo eléctrico'], ['usaEpp', 'Usa EPP'],
+];
 const ANTECEDENTES_PATOLOGICOS = [
   { condicion: 'Padece o ha padecido alguna enfermedad',  phEsp: 'Ej. Diabetes, hipertensión, asma',           phTiempo: 'Ej. Desde 2015, hace 3 años'      },
   { condicion: '¿Le han realizado alguna cirugía?',        phEsp: 'Ej. Apendicectomía, hernia, rodilla',       phTiempo: 'Ej. Hace 5 años, en 2019'         },
@@ -500,16 +508,19 @@ const empty = {
   fuma: '', edadInicioFuma: '', anosFumando: '', cigarrosDia: '',
   consumeAlcohol: null as boolean | null, tipoBebida: '', cantidadBebidas: '', frecuenciaAlcohol: '',
   consumeDrogas: '',
-  drogas: [{ droga: '', frecuencia: '', tiempo: '', ultimaVez: '' }],
+  drogas: [{ droga: '', estado: '', frecuencia: '', tiempo: '', ultimaVez: '' }],
   esquemaVacunacion: null as boolean | null, dosisAnticovid: '', marcaVacuna: '',
   tieneTatuajes: null as boolean | null, ultimoTatuajeAnios: '', ultimoTatuajeMeses: '', usaAudifonos: null as boolean | null,
-  antecedentesFamiliares: ENFERMEDADES_FAMILIARES.map(e => ({ enfermedad: e, si: null as boolean | null, familiares: [] as string[] })),
+  antecedentesFamiliares: ENFERMEDADES_FAMILIARES.map(e => ({
+    enfermedad: e, si: null as boolean | null, familiares: [] as string[],
+    entradas: [{ especifique: '', familiares: [] as string[] }],
+  })),
   edadInicioLaboral: '', trabajoMinas: null as boolean | null, tiempoMinas: '',
   exposiciones: { ruidos: false, polvos: false, vapores: false, humos: false, riesgoElectrico: false, usaEpp: false },
   historialEmpleos: [
-    { empresa: '', cargo: '', tiempo: '', exponentes: '' },
-    { empresa: '', cargo: '', tiempo: '', exponentes: '' },
-    { empresa: '', cargo: '', tiempo: '', exponentes: '' },
+    { empresa: '', cargo: '', tiempo: '', exponentes: [] as string[] },
+    { empresa: '', cargo: '', tiempo: '', exponentes: [] as string[] },
+    { empresa: '', cargo: '', tiempo: '', exponentes: [] as string[] },
   ],
   antecedentesPatologicos: ANTECEDENTES_PATOLOGICOS.map(({ condicion }) => ({ condicion, si: null as boolean | null, entradas: [{ especifique: '', fecha: '' }] })),
 };
@@ -906,6 +917,7 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
   const [step, setStep] = useState<Step>('tipo');
   const [formStep, setFormStep] = useState(1);
   const [patientId, setPatientId] = useState<string | null>(null);
+  const [empresaBusqueda, setEmpresaBusqueda] = useState('');
   const [busqueda, setBusqueda] = useState('');
   const [resultados, setResultados] = useState<any[]>([]);
   const [form, setForm] = useState({ ...empty });
@@ -1000,16 +1012,16 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
     setCpLoading(false);
   };
 
-  const buscar = async (q: string) => {
-    if (!q.trim()) { setResultados([]); return; }
-    const { data } = await api.get('/patients', { params: { q } });
+  const buscar = async (q: string, company: string) => {
+    if (!company || !q.trim()) { setResultados([]); return; }
+    const { data } = await api.get('/patients', { params: { q, company } });
     setResultados(data);
   };
 
   useEffect(() => {
-    const t = setTimeout(() => buscar(busqueda), 300);
+    const t = setTimeout(() => buscar(busqueda, empresaBusqueda), 300);
     return () => clearTimeout(t);
-  }, [busqueda]);
+  }, [busqueda, empresaBusqueda]);
 
   const seleccionarPaciente = (p: any) => {
     setPatientId(p.id);
@@ -1027,7 +1039,7 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
         patientId,
         celular: [lada, celular].filter(Boolean).join(' '),
         municipio: [municipio, estado, pais].filter(Boolean).join(', '),
-        cualDroga:       drogas.map(d => d.droga).filter(Boolean).join(', '),
+        cualDroga:       drogas.filter(d => d.droga.trim()).map(d => d.estado ? `${d.droga}|${d.estado}` : d.droga).join(', '),
         frecuenciaDroga: drogas.map(d => d.frecuencia).filter(Boolean).join(', '),
         tiempoDroga:     drogas.map(d => d.tiempo).filter(Boolean).join(', '),
         ultimaVezDroga:  drogas.map(d => d.ultimaVez).filter(Boolean).join(', '),
@@ -1105,9 +1117,20 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
           </div>
           <div>
             <h2 className="text-lg font-extrabold leading-tight" style={{ color: 'var(--text-primary)' }}>Buscar paciente</h2>
-            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Escribe el nombre o número de celular</p>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Selecciona tu empresa y escribe tu nombre o celular</p>
           </div>
         </div>
+        {/* Empresa */}
+        <select
+          className="input text-base mb-3"
+          style={{ borderRadius: 14, fontSize: 15 }}
+          value={empresaBusqueda}
+          onChange={e => { setEmpresaBusqueda(e.target.value); setBusqueda(''); setResultados([]); }}
+        >
+          <option value="">— Selecciona tu empresa —</option>
+          <option value={SIN_EMPRESA}>— Sin empresa / Particular —</option>
+          {companies.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+        </select>
         {/* Input */}
         <div className="relative">
           <span className="material-symbols-rounded absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: '#3375c8', fontSize: 20 }}>search</span>
@@ -1117,6 +1140,7 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
             placeholder="Ej. Juan García o 811 234 5678"
             value={busqueda}
             onChange={e => setBusqueda(e.target.value)}
+            disabled={!empresaBusqueda}
             autoFocus
           />
           {busqueda && (
@@ -1176,17 +1200,28 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
           </button>
         ))}
 
-        {resultados.length === 0 && busqueda.trim() && (
+        {!empresaBusqueda && (
+          <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: 'rgba(51,117,200,0.08)' }}>
+              <span className="material-symbols-rounded" style={{ color: '#3375c8', fontSize: 32 }}>business</span>
+            </div>
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Selecciona tu empresa para poder buscar</p>
+          </div>
+        )}
+
+        {empresaBusqueda && resultados.length === 0 && busqueda.trim() && (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: 'var(--bg-elevated)' }}>
               <span className="material-symbols-rounded" style={{ color: 'var(--text-muted)', fontSize: 32 }}>person_search</span>
             </div>
             <p className="font-semibold text-sm mb-1" style={{ color: 'var(--text-primary)' }}>Sin resultados</p>
-            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>No se encontró "{busqueda}"</p>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+              No se encontró "{busqueda}" {empresaBusqueda === SIN_EMPRESA ? 'entre los pacientes particulares' : `en ${empresaBusqueda}`}
+            </p>
           </div>
         )}
 
-        {!busqueda.trim() && (
+        {empresaBusqueda && !busqueda.trim() && (
           <div className="flex flex-col items-center justify-center py-12 text-center">
             <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: 'rgba(51,117,200,0.08)' }}>
               <span className="material-symbols-rounded" style={{ color: '#3375c8', fontSize: 32 }}>search</span>
@@ -1679,14 +1714,13 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
                 <Pills
                   options={[
                     { v: 'NO_NUNCA', l: 'No, nunca' },
-                    { v: 'SI_CONSUMO', l: 'Sí, consumo' },
-                    { v: 'CONSUMI', l: 'Consumí antes' },
+                    { v: 'SI', l: 'Sí' },
                   ]}
                   value={form.consumeDrogas}
                   onChange={v => set('consumeDrogas', v)}
                 />
               </div>
-              {form.consumeDrogas && form.consumeDrogas !== 'NO_NUNCA' && (
+              {form.consumeDrogas === 'SI' && (
                 <div className="space-y-3">
                   {form.drogas.map((d, i) => (
                     <div key={i} className="space-y-2 rounded-lg p-2" style={{ background: 'var(--bg-subtle, rgba(0,0,0,.04))' }}>
@@ -1709,6 +1743,12 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
                         <input className="input" placeholder="Ej. Marihuana, cocaína"
                           value={d.droga}
                           onChange={e => setForm(f => ({ ...f, drogas: f.drogas.map((x, j) => j === i ? { ...x, droga: e.target.value } : x) }))} />
+                      </Field>
+                      <Field label="¿Sí consume o consumió antes?">
+                        <Pills
+                          options={[{ v: 'SI_CONSUMO', l: 'Sí, consumo' }, { v: 'CONSUMI', l: 'Consumí antes' }]}
+                          value={d.estado}
+                          onChange={v => setForm(f => ({ ...f, drogas: f.drogas.map((x, j) => j === i ? { ...x, estado: v } : x) }))} />
                       </Field>
                       <Field label="Frecuencia">
                         <select className="input"
@@ -1734,7 +1774,7 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
                   ))}
                   <button
                     type="button"
-                    onClick={() => setForm(f => ({ ...f, drogas: [...f.drogas, { droga: '', frecuencia: '', tiempo: '', ultimaVez: '' }] }))}
+                    onClick={() => setForm(f => ({ ...f, drogas: [...f.drogas, { droga: '', estado: '', frecuencia: '', tiempo: '', ultimaVez: '' }] }))}
                     className="btn w-full text-xs flex items-center justify-center gap-1"
                     style={{ borderColor: 'var(--border-subtle)', color: 'var(--text-muted)' }}
                   >
@@ -1759,13 +1799,27 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
 
           <div className="grid grid-cols-2 gap-4">
             <Field label="N° de dosis anticovid">
-              <select className="input" value={form.dosisAnticovid} onChange={e => set('dosisAnticovid', e.target.value)}>
+              <select className="input" value={form.dosisAnticovid} onChange={e => {
+                const val = e.target.value;
+                setForm(f => ({
+                  ...f,
+                  dosisAnticovid: val,
+                  marcaVacuna: val === '0' ? 'No vacunado' : (f.marcaVacuna === 'No vacunado' ? '' : f.marcaVacuna),
+                }));
+              }}>
                 <option value="">— Seleccionar —</option>
-                {['1', '2', '3', '4', '5 o más'].map(d => <option key={d} value={d}>{d}</option>)}
+                {['0', '1', '2', '3', '4', '5 o más'].map(d => <option key={d} value={d}>{d === '0' ? '0 (sin dosis)' : d}</option>)}
               </select>
             </Field>
             <Field label="Marca de vacuna COVID-19">
-              <select className="input" value={form.marcaVacuna} onChange={e => set('marcaVacuna', e.target.value)}>
+              <select className="input" value={form.marcaVacuna} onChange={e => {
+                const val = e.target.value;
+                setForm(f => ({
+                  ...f,
+                  marcaVacuna: val,
+                  dosisAnticovid: val === 'No vacunado' ? '0' : (f.dosisAnticovid === '0' ? '' : f.dosisAnticovid),
+                }));
+              }}>
                 <option value="">— Seleccionar —</option>
                 <option value="Pfizer-BioNTech (Comirnaty)">Pfizer-BioNTech (Comirnaty)</option>
                 <option value="Moderna (Spikevax)">Moderna (Spikevax)</option>
@@ -1819,32 +1873,94 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
             ¿Algún familiar directo padece o ha padecido alguna de estas enfermedades? Selecciona quién.
           </p>
           <div className="space-y-1">
-            {af.map((item, i) => (
-              <div key={i} className="py-3 border-b last:border-0" style={{ borderColor: 'var(--border-subtle)' }}>
-                <p className="text-sm font-medium mb-2" style={{ color: 'var(--text-primary)' }}>{item.enfermedad}</p>
-                <div className="space-y-2">
-                  <BoolPills value={item.si} onChange={v => {
-                    const next = [...af]; next[i] = { ...next[i], si: v };
-                    set('antecedentesFamiliares', next);
-                  }} />
-                  {item.si && (
-                    <div className="pt-1">
-                      <ParientesMultiSelect
-                        selected={item.familiares}
-                        onToggle={p => {
-                          const next = [...af];
-                          const fams = item.familiares.includes(p)
-                            ? item.familiares.filter(f => f !== p)
-                            : [...item.familiares, p];
-                          next[i] = { ...next[i], familiares: fams };
-                          set('antecedentesFamiliares', next);
-                        }}
-                      />
-                    </div>
-                  )}
+            {af.map((item, i) => {
+              const isOtras = item.enfermedad === 'Otras';
+              return (
+                <div key={i} className="py-3 border-b last:border-0" style={{ borderColor: 'var(--border-subtle)' }}>
+                  <p className="text-sm font-medium mb-2" style={{ color: 'var(--text-primary)' }}>{item.enfermedad}</p>
+                  <div className="space-y-2">
+                    <BoolPills value={item.si} onChange={v => {
+                      const next = [...af]; next[i] = { ...next[i], si: v };
+                      set('antecedentesFamiliares', next);
+                    }} />
+                    {item.si && !isOtras && (
+                      <div className="pt-1">
+                        <ParientesMultiSelect
+                          selected={item.familiares}
+                          onToggle={p => {
+                            const next = [...af];
+                            const fams = item.familiares.includes(p)
+                              ? item.familiares.filter(f => f !== p)
+                              : [...item.familiares, p];
+                            next[i] = { ...next[i], familiares: fams };
+                            set('antecedentesFamiliares', next);
+                          }}
+                        />
+                      </div>
+                    )}
+                    {item.si && isOtras && (
+                      <div className="pt-1 space-y-3">
+                        {item.entradas.map((entrada, ei) => (
+                          <div key={ei} className="space-y-2 rounded-lg p-2" style={{ background: 'var(--bg-subtle, rgba(0,0,0,.04))' }}>
+                            <div className="flex items-end gap-2">
+                              <div className="flex-1">
+                                <Field label="Especifique">
+                                  <input className="input" placeholder="Ej. Asma, artritis"
+                                    value={entrada.especifique}
+                                    onChange={e => {
+                                      const next = [...af];
+                                      const entradas = [...item.entradas];
+                                      entradas[ei] = { ...entradas[ei], especifique: e.target.value };
+                                      next[i] = { ...next[i], entradas };
+                                      set('antecedentesFamiliares', next);
+                                    }} />
+                                </Field>
+                              </div>
+                              {item.entradas.length > 1 && (
+                                <button type="button"
+                                  onClick={() => {
+                                    const next = [...af];
+                                    next[i] = { ...next[i], entradas: item.entradas.filter((_, j) => j !== ei) };
+                                    set('antecedentesFamiliares', next);
+                                  }}
+                                  className="flex items-center justify-center w-9 h-9 rounded-lg shrink-0 mb-0.5"
+                                  style={{ color: 'var(--text-muted)' }}>
+                                  <span className="material-symbols-rounded" style={{ fontSize: 18 }}>delete</span>
+                                </button>
+                              )}
+                            </div>
+                            <ParientesMultiSelect
+                              selected={entrada.familiares}
+                              onToggle={p => {
+                                const next = [...af];
+                                const entradas = [...item.entradas];
+                                const fams = entrada.familiares.includes(p)
+                                  ? entrada.familiares.filter(f => f !== p)
+                                  : [...entrada.familiares, p];
+                                entradas[ei] = { ...entradas[ei], familiares: fams };
+                                next[i] = { ...next[i], entradas };
+                                set('antecedentesFamiliares', next);
+                              }}
+                            />
+                          </div>
+                        ))}
+                        <button type="button"
+                          onClick={() => {
+                            const next = [...af];
+                            next[i] = { ...next[i], entradas: [...item.entradas, { especifique: '', familiares: [] }] };
+                            set('antecedentesFamiliares', next);
+                          }}
+                          className="flex items-center gap-1 text-xs px-3 py-1 rounded-lg font-semibold"
+                          style={{ background: `${stepColor}18`, color: stepColor }}>
+                          <span className="material-symbols-rounded" style={{ fontSize: 15 }}>add</span>
+                          Añadir
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>}
 
@@ -1872,11 +1988,7 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
           <div>
             <Label>Ha estado expuesto a:</Label>
             <div className="flex flex-wrap gap-2">
-              {([
-                ['ruidos', 'Ruidos fuertes'], ['polvos', 'Polvos'],
-                ['vapores', 'Vapores'], ['humos', 'Humos'],
-                ['riesgoElectrico', 'Riesgo eléctrico'], ['usaEpp', 'Usa EPP'],
-              ] as [string, string][]).map(([k, l]) => (
+              {EXPOSICION_OPCIONES.map(([k, l]) => (
                 <button key={k} type="button"
                   onClick={() => set('exposiciones', { ...form.exposiciones, [k]: !(form.exposiciones as any)[k] })}
                   className="px-4 py-2 rounded-xl text-sm font-semibold transition"
@@ -1906,7 +2018,7 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
             <div className="flex items-center justify-between mb-2">
               <Label>Historial de empleos (actual primero)</Label>
               <button type="button"
-                onClick={() => set('historialEmpleos', [...form.historialEmpleos, { empresa: '', cargo: '', tiempo: '', exponentes: '' }])}
+                onClick={() => set('historialEmpleos', [...form.historialEmpleos, { empresa: '', cargo: '', tiempo: '', exponentes: [] as string[] }])}
                 className="flex items-center gap-1 text-xs px-3 py-1 rounded-lg font-semibold transition"
                 style={{ background: `${stepColor}18`, color: stepColor }}>
                 <span className="material-symbols-rounded" style={{ fontSize: 15 }}>add</span>
@@ -1927,7 +2039,7 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
                   {form.historialEmpleos.map((emp, i) => (
                     <tr key={i}>
                       <td className="pr-2 pb-2 text-sm" style={{ color: 'var(--text-muted)' }}>{i + 1}.</td>
-                      {(['empresa', 'cargo', 'tiempo', 'exponentes'] as const).map(col => (
+                      {(['empresa', 'cargo', 'tiempo'] as const).map(col => (
                         <td key={col} className="pr-2 pb-2">
                           <input className="input text-sm" value={(emp as any)[col]}
                             onChange={e => {
@@ -1937,6 +2049,36 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
                             }} />
                         </td>
                       ))}
+                      <td className="pr-2 pb-2" style={{ minWidth: 180 }}>
+                        <div className="flex flex-wrap gap-1">
+                          {EXPOSICION_OPCIONES.filter(([k]) => (form.exposiciones as any)[k]).map(([k, l]) => {
+                            const seleccionado = (emp.exponentes || []).includes(l);
+                            return (
+                              <button key={k} type="button"
+                                onClick={() => {
+                                  const next = [...form.historialEmpleos];
+                                  const actuales = next[i].exponentes || [];
+                                  next[i] = {
+                                    ...next[i],
+                                    exponentes: seleccionado ? actuales.filter(x => x !== l) : [...actuales, l],
+                                  };
+                                  set('historialEmpleos', next);
+                                }}
+                                className="px-2 py-1 rounded-lg text-[11px] font-semibold transition"
+                                style={seleccionado
+                                  ? { background: stepColor, color: '#fff' }
+                                  : { background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)' }}>
+                                {l}
+                              </button>
+                            );
+                          })}
+                          {EXPOSICION_OPCIONES.every(([k]) => !(form.exposiciones as any)[k]) && (
+                            <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                              Selecciona arriba "Ha estado expuesto a"
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="pb-2">
                         {form.historialEmpleos.length > 1 && (
                           <button type="button"

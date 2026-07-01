@@ -20,13 +20,18 @@ const patientSchema = z.object({
   photoUrl: z.string().optional().nullable(),
 });
 
+const SIN_EMPRESA = '__sin_empresa__';
+
 router.get('/', async (req, res) => {
   const q = (req.query.q as string) || '';
-  const baseWhere = { NOT: { fullName: { startsWith: 'Trabajador ', mode: 'insensitive' as const } } };
+  const company = (req.query.company as string) || '';
+  const filters: any[] = [{ NOT: { fullName: { startsWith: 'Trabajador ', mode: 'insensitive' as const } } }];
+  if (company === SIN_EMPRESA) filters.push({ OR: [{ company: null }, { company: '' }] });
+  else if (company) filters.push({ company: { equals: company, mode: 'insensitive' as const } });
+  if (q) filters.push({ OR: [{ fullName: { contains: q, mode: 'insensitive' } }, { phone: { contains: q } }] });
+
   const patients = await prisma.patient.findMany({
-    where: q
-      ? { AND: [baseWhere, { OR: [{ fullName: { contains: q, mode: 'insensitive' } }, { phone: { contains: q } }] }] }
-      : baseWhere,
+    where: { AND: filters },
     orderBy: { createdAt: 'desc' },
     take: 100,
   });

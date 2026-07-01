@@ -23,6 +23,7 @@ router.post('/', async (req: AuthRequest, res) => {
           birthDate: d.fechaNacimiento ? new Date(d.fechaNacimiento) : null,
           gender: null,
           medicalNotes: null,
+          company: d.empresa || null,
         },
       });
       patientId = patient.id;
@@ -34,6 +35,7 @@ router.post('/', async (req: AuthRequest, res) => {
           phone: d.celular || undefined,
           email: d.correo || undefined,
           nss: d.nss || undefined,
+          company: d.empresa || undefined,
         },
       });
     }
