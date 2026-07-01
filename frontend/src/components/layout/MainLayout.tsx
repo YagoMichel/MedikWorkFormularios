@@ -12,6 +12,17 @@ import { useAuth } from '../../stores/auth';
 import { useTheme } from '../../stores/theme.tsx';
 import logo from '../../assets/logo.png';
 import BottomNav from './BottomNav';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '../../services/api';
+import { useEffect, useRef, useState } from 'react';
+
+type NotifItem = {
+  id: string;
+  title: string;
+  subtitle: string;
+  timeStr: string;
+  unread: boolean;
+};
 
 const Icon = ({ name }: { name: string }) => <span className="material-symbols-rounded">{name}</span>;
 
@@ -21,6 +32,70 @@ export default function MainLayout() {
   const loc = useLocation();
   const { dark, toggle } = useTheme();
   const isAdmin = user?.role === 'ADMIN';
+  const isDoctor = user?.role === 'DOCTOR';
+
+  const { data: appts = [] } = useQuery({
+    queryKey: ['doctor-appointments-today'],
+    queryFn: async () => {
+      const today = new Date(); today.setHours(0,0,0,0);
+      const tmrw = new Date(today.getTime() + 86400000);
+      return (await api.get('/appointments', { params: { mine: true, from: today.toISOString(), to: tmrw.toISOString() } })).data;
+    },
+    enabled: isDoctor,
+  });
+
+  const notifiedRef = useRef<Set<string>>(new Set());
+  const [notifications, setNotifications] = useState<NotifItem[]>([]);
+  const [showNotifMenu, setShowNotifMenu] = useState(false);
+  const unreadCount = notifications.filter(n => n.unread).length;
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (!(e.target as Element).closest('.notif-container')) {
+        setShowNotifMenu(false);
+      }
+    };
+    document.addEventListener('click', handleClick);
+    return () => document.removeEventListener('click', handleClick);
+  }, []);
+
+  useEffect(() => {
+    if (!isDoctor) return;
+    const interval = setInterval(() => {
+      const now = new Date();
+      
+      appts.forEach((a: any) => {
+        if (a.status === 'CANCELADA' || a.status === 'ATENDIDA' || a.status === 'NO_ASISTIO') return;
+        const apptDate = new Date(a.date);
+        const diffMs = apptDate.getTime() - now.getTime();
+        const diffMins = Math.floor(diffMs / 60000);
+
+        if (diffMins === 15 || diffMins === 5) {
+          const notifId = `${a.id}-${diffMins}`;
+          if (!notifiedRef.current.has(notifId)) {
+            notifiedRef.current.add(notifId);
+            setNotifications(prev => {
+              if (prev.find(n => n.id === notifId)) return prev;
+              const typeLabel = a.type === 'PRIMERA_VEZ' ? 'Primera vez' : a.type === 'SEGUIMIENTO' ? 'Seguimiento' : 'Consulta general';
+              const newNotif = {
+                id: notifId,
+                title: `Cita en ${diffMins} minutos`,
+                subtitle: `${a.patient?.fullName || 'Paciente'} - ${typeLabel}`,
+                timeStr: `Hoy, ${apptDate.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}`,
+                unread: true
+              };
+              return [newNotif, ...prev];
+            });
+          }
+        }
+      });
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [appts, isDoctor]);
+
+  const markAllRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
+  };
 
   const links = isAdmin ? [
     { to: '/',          icon: 'dashboard',      label: 'Dashboard'  },
@@ -91,9 +166,52 @@ export default function MainLayout() {
             <button onClick={toggle} className="layout-icon-btn w-9 h-9 rounded-xl flex items-center justify-center transition" title={dark ? 'Modo claro' : 'Modo oscuro'}>
               <Icon name={dark ? 'light_mode' : 'dark_mode'} />
             </button>
-            <button className="layout-icon-btn w-9 h-9 rounded-xl flex items-center justify-center transition">
-              <Icon name="notifications" />
-            </button>
+            <div className="relative notif-container">
+              <button onClick={() => setShowNotifMenu(!showNotifMenu)} className="relative layout-icon-btn w-9 h-9 rounded-xl flex items-center justify-center transition">
+                <Icon name="notifications" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-blue-500 text-white text-[10px] font-bold border-2 border-white dark:border-slate-900 shadow-sm">
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+              
+              {showNotifMenu && (
+                <div className="absolute top-full right-[-8px] mt-3 w-80 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-700 z-50 transform origin-top-right transition-all fade-in">
+                  <div className="absolute -top-1.5 right-[20px] w-3 h-3 bg-white dark:bg-slate-800 border-l border-t border-slate-100 dark:border-slate-700 rotate-45"></div>
+                  
+                  <div className="relative z-10 bg-white dark:bg-slate-800 rounded-2xl overflow-hidden">
+                    <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
+                      <h3 className="font-bold text-slate-800 dark:text-white text-sm">Notificaciones</h3>
+                      <button onClick={markAllRead} className="text-xs text-blue-600 dark:text-blue-400 font-medium hover:underline">
+                        Marcar todas como leídas
+                      </button>
+                    </div>
+                    <div className="max-h-80 overflow-y-auto custom-scrollbar p-3 space-y-2">
+                      {notifications.length === 0 ? (
+                        <div className="text-center py-6 text-sm text-slate-400">
+                          No tienes notificaciones
+                        </div>
+                      ) : (
+                        notifications.map(n => (
+                          <div key={n.id} className="flex gap-3 p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/50 transition cursor-default">
+                            <div className="w-10 h-10 shrink-0 rounded-xl bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+                              <Icon name="event" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[13px] font-bold text-slate-800 dark:text-white truncate">{n.title}</div>
+                              <div className="text-xs text-slate-500 truncate mt-0.5">{n.subtitle}</div>
+                              <div className="text-[10px] text-slate-400 mt-1">{n.timeStr}</div>
+                            </div>
+                            {n.unread && <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0 mt-2"></div>}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
             <div className="layout-user flex items-center gap-2 px-2 py-1 rounded-xl">
               <div className="w-7 h-7 rounded-full text-white text-[11px] font-bold flex items-center justify-center"
                 style={{ background: 'linear-gradient(135deg, #3375c8, #51abcd)' }}>{initials}</div>

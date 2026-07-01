@@ -10,6 +10,7 @@ import { api } from '../../services/api';
 import { useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../stores/auth';
+import { Calendar as CalendarIcon, Clock, CheckCircle } from 'lucide-react';
 
 const PRESET_COLORS = [
   '#3b82f6', '#8b5cf6', '#51abcd', '#f59e0b',
@@ -35,35 +36,40 @@ export default function Calendar() {
     queryFn: async () => (await api.get('/appointments')).data,
   });
 
+  const { data: batches = [] } = useQuery({
+    queryKey: ['batches'],
+    queryFn: async () => (await api.get('/batches')).data,
+  });
+
   const create = useMutation({
     mutationFn: async (data: any) => (await api.post('/batches', data)).data,
-    onSuccess: () => { toast.success('Cita empresarial creada'); qc.invalidateQueries({ queryKey: ['appointments'] }); setShowForm(false); },
+    onSuccess: () => { toast.success('Cita empresarial creada'); qc.invalidateQueries({ queryKey: ['appointments'] }); qc.invalidateQueries({ queryKey: ['batches'] }); setShowForm(false); },
     onError: (e: any) => toast.error(e.response?.data?.error || 'Error'),
   });
 
   const remove = useMutation({
     mutationFn: async (id: string) => (await api.delete(`/appointments/${id}`)).data,
-    onSuccess: () => { toast.success('Cita eliminada'); qc.invalidateQueries({ queryKey: ['appointments'] }); },
+    onSuccess: () => { toast.success('Cita eliminada'); qc.invalidateQueries({ queryKey: ['appointments'] }); qc.invalidateQueries({ queryKey: ['batches'] }); },
     onError: () => toast.error('Error al eliminar'),
   });
 
   const eventsByDay = useMemo(() => {
     const m = new Map<string, any[]>();
     for (const a of events) {
+      if (a.batchId) continue;
       const d = new Date(a.date);
       const k = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
       if (!m.has(k)) m.set(k, []);
-      const list = m.get(k)!;
-      if (a.batchId) {
-        const existing = list.find((e: any) => e.batchId === a.batchId);
-        if (existing) { existing._count = (existing._count || 1) + 1; continue; }
-        list.push({ ...a, _count: 1, _isBatch: true });
-      } else {
-        list.push(a);
-      }
+      m.get(k)!.push(a);
+    }
+    for (const b of batches) {
+      const d = new Date(b.date);
+      const k = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      if (!m.has(k)) m.set(k, []);
+      m.get(k)!.push({ ...b, _isBatch: true });
     }
     return m;
-  }, [events]);
+  }, [events, batches]);
 
   const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 
@@ -104,6 +110,11 @@ export default function Calendar() {
     return Array.from({ length: 42 }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return d; });
   }, [cursor]);
 
+  const selectedEvents = eventsByDay.get(dayKey(selected)) || [];
+  const countProgramadas = selectedEvents.length;
+  const countCompletadas = selectedEvents.filter((a: any) => a.status === 'ATENDIDA').length;
+  const countPendientes = countProgramadas - countCompletadas;
+
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
@@ -113,47 +124,78 @@ export default function Calendar() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
-        {/* Mini calendario */}
-        <div className="card p-5 h-fit">
-          <div className="flex justify-between items-center mb-4">
-            <h4 className="text-sm font-extrabold capitalize">{MONTHS[cursor.getMonth()]} {cursor.getFullYear()}</h4>
-            <div className="flex gap-1">
-              <button className="w-8 h-8 inline-flex items-center justify-center rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 transition"
-                onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}>
-                <span className="material-symbols-rounded text-[18px]">chevron_left</span>
-              </button>
-              <button className="w-8 h-8 inline-flex items-center justify-center rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 transition"
-                onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}>
-                <span className="material-symbols-rounded text-[18px]">chevron_right</span>
-              </button>
+        <div className="flex flex-col gap-6">
+          {/* Mini calendario */}
+          <div className="card p-5 h-fit shadow-sm">
+            <div className="flex justify-between items-center mb-4">
+              <h4 className="text-sm font-extrabold capitalize">{MONTHS[cursor.getMonth()]} {cursor.getFullYear()}</h4>
+              <div className="flex gap-1">
+                <button className="w-8 h-8 inline-flex items-center justify-center rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 transition"
+                  onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}>
+                  <span className="material-symbols-rounded text-[18px]">chevron_left</span>
+                </button>
+                <button className="w-8 h-8 inline-flex items-center justify-center rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 transition"
+                  onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}>
+                  <span className="material-symbols-rounded text-[18px]">chevron_right</span>
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-7 gap-1">
+              {DOW_SHORT.map((l) => (
+                <div key={l} className="text-center text-[10px] font-extrabold text-slate-400 pb-2">{l}</div>
+              ))}
+              {calCells.map((d, i) => {
+                const isMuted = d.getMonth() !== cursor.getMonth();
+                const isActive = sameDay(d, selected);
+                const isToday = sameDay(d, new Date());
+                const hasEvent = (eventsByDay.get(dayKey(d)) || []).length > 0;
+                return (
+                  <button key={i}
+                    onClick={() => { setSelected(new Date(d)); setCursor(new Date(d.getFullYear(), d.getMonth(), 1)); }}
+                    className="relative aspect-square flex items-center justify-center text-[11px] font-semibold rounded-lg transition"
+                    style={isActive ? { background: '#3b82f6', color: '#fff', boxShadow: '0 2px 8px rgba(59,130,246,0.4)' }
+                      : isToday ? { color: '#3b82f6', outline: '1px solid #93c5fd' }
+                      : isMuted ? { color: '#cbd5e1' } : { color: '#475569' }}
+                  >
+                    {d.getDate()}
+                    {hasEvent && !isActive && <span className="absolute bottom-1 w-[4px] h-[4px] rounded-full bg-amber-500" />}
+                  </button>
+                );
+              })}
             </div>
           </div>
-          <div className="grid grid-cols-7 gap-1">
-            {DOW_SHORT.map((l) => (
-              <div key={l} className="text-center text-[10px] font-extrabold text-slate-400 pb-2">{l}</div>
-            ))}
-            {calCells.map((d, i) => {
-              const isMuted = d.getMonth() !== cursor.getMonth();
-              const isActive = sameDay(d, selected);
-              const isToday = sameDay(d, new Date());
-              const hasEvent = (eventsByDay.get(dayKey(d)) || []).length > 0;
-              return (
-                <button key={i}
-                  onClick={() => { setSelected(new Date(d)); setCursor(new Date(d.getFullYear(), d.getMonth(), 1)); }}
-                  className="relative aspect-square flex items-center justify-center text-[11px] font-semibold rounded-lg transition"
-                  style={isActive ? { background: '#3375c8', color: '#fff', boxShadow: '0 2px 8px rgba(51,117,200,0.4)' }
-                    : isToday ? { color: '#3375c8', outline: '1px solid #6ec0db' }
-                    : isMuted ? { color: '#cbd5e1' } : { color: '#475569' }}
-                >
-                  {d.getDate()}
-                  {hasEvent && !isActive && <span className="absolute bottom-1 w-[4px] h-[4px] rounded-full bg-amber-500" />}
-                </button>
-              );
-            })}
+
+          {/* Resumen del día */}
+          <div className="card p-5 shadow-sm">
+            <h4 className="text-sm font-extrabold text-slate-800 dark:text-white mb-4">Resumen del día</h4>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3 rounded-xl bg-purple-50 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-800/30">
+                <div className="flex items-center gap-3">
+                  <CalendarIcon size={16} className="text-purple-600 dark:text-purple-400"/>
+                  <span className="text-[13px] font-semibold text-slate-700 dark:text-slate-300">Citas programadas</span>
+                </div>
+                <span className="font-extrabold text-slate-800 dark:text-white">{countProgramadas}</span>
+              </div>
+              <div className="flex items-center justify-between p-3 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-800/30">
+                <div className="flex items-center gap-3">
+                  <Clock size={16} className="text-orange-500 dark:text-orange-400"/>
+                  <span className="text-[13px] font-semibold text-slate-700 dark:text-slate-300">Pendientes</span>
+                </div>
+                <span className="font-extrabold text-slate-800 dark:text-white">{countPendientes}</span>
+              </div>
+              <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800/30">
+                <div className="flex items-center gap-3">
+                  <CheckCircle size={16} className="text-emerald-500 dark:text-emerald-400"/>
+                  <span className="text-[13px] font-semibold text-slate-700 dark:text-slate-300">Completadas</span>
+                </div>
+                <span className="font-extrabold text-slate-800 dark:text-white">{countCompletadas}</span>
+              </div>
+            </div>
+
           </div>
         </div>
 
-      <div className="card p-0 overflow-hidden">
+      <div className="card p-0 overflow-hidden shadow-sm flex flex-col">
         {/* Header semana */}
         <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center flex-wrap gap-3">
           <h3 className="text-base font-extrabold capitalize">{weekLabel}</h3>
@@ -168,73 +210,123 @@ export default function Calendar() {
           </div>
         </div>
 
-        {/* Grilla semanal */}
-        <div className="grid grid-cols-7 divide-x divide-slate-100">
-          {weekDays.map((d, i) => {
-            const list = eventsByDay.get(dayKey(d)) || [];
-            const isToday = sameDay(d, new Date());
-            const isSelected = sameDay(d, selected);
-            return (
-              <div key={i}
-                className="min-h-[200px] p-3 cursor-pointer transition"
-                style={isSelected ? { background: 'color-mix(in srgb, #3375c8 12%, var(--bg-card))' } : {}}
-                onClick={() => setSelected(new Date(d))}
-              >
-                {/* Cabecera día */}
-                <div className="mb-2">
-                  <div className="text-[11px] font-bold uppercase" style={{ color: isToday || isSelected ? '#3375c8' : '#94a3b8' }}>
-                    {DOW_LONG[d.getDay()].slice(0,3)}
-                  </div>
-                  <div
-                    className="text-xl font-extrabold w-8 h-8 flex items-center justify-center rounded-full"
-                    style={isToday
-                      ? { background: '#3375c8', color: '#fff' }
-                      : isSelected
-                        ? { background: '#e0eeff', color: '#3375c8' }
-                        : { color: '#334155' }}
-                  >
-                    {d.getDate()}
-                  </div>
+        {/* Grilla semanal horaria */}
+        <div className="flex flex-col relative bg-slate-50/30 dark:bg-slate-900/50" style={{ minHeight: '780px' }}>
+          <div className="flex flex-1">
+            {/* Eje de tiempo */}
+            <div className="w-14 shrink-0 border-r border-slate-100 dark:border-slate-800 relative bg-white dark:bg-slate-900 z-10">
+              <div className="h-[70px]"></div>
+              {Array.from({ length: 13 }, (_, i) => 7 + i).map(hour => (
+                <div key={hour} className="h-[60px] relative">
+                  <span className="absolute -top-2.5 right-2 text-[10px] text-slate-400 font-semibold">{String(hour).padStart(2, '0')}:00</span>
                 </div>
+              ))}
+            </div>
 
-                {/* Citas del día */}
-                <div className="flex flex-col gap-1.5">
-                  {list.map((a: any) => a._isBatch ? (
-                    <div
-                      key={a.batchId}
-                      className="rounded-lg px-2 py-1.5 border-l-[3px] text-[11px]"
-                      style={{ borderLeftColor: '#3375c8', backgroundColor: '#3375c820' }}
-                    >
-                      <div className="font-semibold text-slate-800 truncate">{a.batch?.company?.name || 'Empresa'}</div>
-                      <div className="text-slate-500">{a._count} pacientes · 08:00</div>
-                    </div>
-                  ) : (
-                    <div
-                      key={a.id}
-                      className="rounded-lg px-2 py-1.5 border-l-[3px] text-[11px] group relative"
-                      style={{ borderLeftColor: a.color || DEFAULT_COLOR, backgroundColor: (a.color || DEFAULT_COLOR) + '20' }}
-                    >
-                      <div className="font-semibold text-slate-800 truncate">{a.patient.fullName}</div>
-                      <button
-                        onClick={() => setConfirmDelete({ id: a.id, name: a.patient.fullName })}
-                        className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 transition"
-                      >
-                        <span className="material-symbols-rounded text-[15px]">delete</span>
-                      </button>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Click para agendar */}
-                <button
-                  onClick={() => openNew(d)}
-                  className="mt-2 w-full text-[10px] text-slate-300 hover:text-slate-400 hover:bg-slate-50 rounded py-1 transition text-center"
-                >
-                  + agregar
-                </button>
+            {/* Columnas de días */}
+            <div className="flex-1 grid grid-cols-7 divide-x divide-slate-100 dark:divide-slate-800 relative">
+              
+              {/* Lineas horizontales de fondo */}
+              <div className="absolute inset-0 pointer-events-none mt-[70px]">
+                {Array.from({ length: 13 }, (_, i) => (
+                  <div key={i} className="h-[60px] border-b border-slate-100 dark:border-slate-800/50 w-full" />
+                ))}
               </div>
-            );
-          })}
+
+              {weekDays.map((d, i) => {
+                const list = eventsByDay.get(dayKey(d)) || [];
+                const isToday = sameDay(d, new Date());
+                const isSelected = sameDay(d, selected);
+                return (
+                  <div key={i} className="relative cursor-pointer transition hover:bg-blue-50/30 dark:hover:bg-blue-900/10"
+                    onClick={() => setSelected(new Date(d))}
+                    style={isSelected ? { backgroundColor: 'rgba(59, 130, 246, 0.05)' } : {}}
+                  >
+                    {/* Cabecera del día */}
+                    <div className="h-[70px] flex flex-col items-center justify-center border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
+                      <div className="text-[10px] font-bold uppercase mb-1" style={{ color: isToday || isSelected ? '#3b82f6' : '#94a3b8' }}>
+                        {DOW_SHORT[d.getDay()]}
+                      </div>
+                      <div className="text-base font-extrabold w-8 h-8 flex items-center justify-center rounded-full mb-1"
+                        style={isToday ? { background: '#3b82f6', color: '#fff' } : isSelected ? { background: '#eff6ff', color: '#3b82f6' } : { color: 'inherit' }}
+                      >
+                        {d.getDate()}
+                      </div>
+                      <button onClick={(e) => { e.stopPropagation(); openNew(d); }} className="text-[10px] font-bold text-blue-500 hover:text-blue-600 transition">+ Agregar</button>
+                    </div>
+
+                    {/* Contenedor de eventos */}
+                    <div className="relative mt-1 overflow-hidden" style={{ height: '720px' }}>
+                      {list.map((a: any) => {
+                        const date = new Date(a.date);
+                        let hour = date.getHours();
+                        let min = date.getMinutes();
+                        if (hour < 7) hour = 7;
+                        if (hour > 19) hour = 19;
+                        
+                        const top = (hour - 7) * 60 + min;
+                        const height = (a.durationMin || 30);
+                        const isBatch = a._isBatch;
+                        const isPending = a.status === 'AGENDADA' || a.status === 'BORRADOR';
+                        
+                        const bg = isBatch ? 'var(--tw-colors-blue-50, #eff6ff)' : isPending ? 'var(--tw-colors-purple-50, #f5f3ff)' : 'var(--tw-colors-blue-50, #eff6ff)';
+                        const border = isBatch ? '#3b82f6' : isPending ? '#8b5cf6' : '#3b82f6';
+                        
+                        return (
+                          <div
+                            key={a.id || a.batchId}
+                            className="absolute left-1 right-1 rounded-md p-1.5 border-l-[3px] shadow-sm overflow-hidden group flex flex-col"
+                            style={{ top: `${top}px`, height: `${height}px`, backgroundColor: bg, borderLeftColor: border, zIndex: 20 }}
+                          >
+                            <div className="font-bold text-slate-800 dark:text-slate-900 flex items-center gap-1 text-[11px] leading-tight truncate">
+                              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: border }}></span>
+                              {a.company?.name || a.batch?.company?.name || a.patient?.fullName || 'Paciente'}
+                            </div>
+                            <div className="text-slate-500 dark:text-slate-600 text-[10px] truncate pl-2.5 mt-0.5">
+                              {a.expectedCount ? `${a.expectedCount} pacientes · ` : ''}{date.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                            <div className="pl-2.5 mt-0.5">
+                              <span className="text-[9px] font-medium px-1.5 py-0.5 rounded" style={{ backgroundColor: isPending ? 'var(--tw-colors-purple-100, #ede9fe)' : 'var(--tw-colors-blue-100, #dbeafe)', color: border }}>
+                                {isPending ? 'Pendiente' : 'Completada'}
+                              </span>
+                            </div>
+                            
+                            {!isBatch && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setConfirmDelete({ id: a.id, name: a.patient?.fullName }); }}
+                                className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 transition"
+                              >
+                                <span className="material-symbols-rounded text-[14px]">delete</span>
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          
+          {/* Footer Leyenda */}
+          <div className="px-6 py-4 flex items-center justify-between border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 mt-auto">
+            <div className="flex gap-4 flex-wrap">
+              <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                <div className="w-2 h-2 rounded-full bg-purple-500"></div> Consulta
+              </div>
+              <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                <div className="w-2 h-2 rounded-full bg-blue-500"></div> Cita programada
+              </div>
+              <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                <div className="w-2 h-2 rounded-full bg-orange-500"></div> Pendiente
+              </div>
+              <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                <div className="w-2 h-2 rounded-full bg-emerald-500"></div> Completada
+              </div>
+            </div>
+
+          </div>
         </div>
       </div>
 
