@@ -29,6 +29,7 @@ import AdminDashboard      from './pages/admin/Dashboard';
 import AdminInventory      from './pages/admin/Inventory';
 import AdminMovements      from './pages/admin/Movements';
 import AdminSales          from './pages/admin/Sales';
+import AdminPOS            from './pages/pos/POS';
 import AdminUsers          from './pages/admin/Users';
 import AdminCompanies      from './pages/admin/Companies';
 import AdminBatchesManager from './pages/admin/BatchesManager';
@@ -71,6 +72,7 @@ export default function App() {
           <Route path="/inventory"   element={<AdminInventory />} />
           <Route path="/movements"   element={<AdminMovements />} />
           <Route path="/sales"       element={<AdminSales />} />
+          <Route path="/pos"         element={<AdminPOS />} />
           <Route path="/users"       element={<AdminUsers />} />
           <Route path="/companies"   element={<AdminCompanies />} />
           <Route path="/citas"       element={<AdminBatchesManager />} />

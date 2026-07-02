@@ -179,6 +179,8 @@ export default function MainLayout() {
   const links = isAdmin ? [
     { to: '/',          icon: 'dashboard',      label: 'Dashboard'  },
     { to: '/inventory', icon: 'inventory_2',    label: 'Inventario' },
+    { to: '/pos',       icon: 'point_of_sale',  label: 'Punto de venta' },
+    { to: '/sales',     icon: 'receipt_long',   label: 'Ventas'     },
     { to: '/companies', icon: 'business',       label: 'Empresas'   },
     { to: '/users',     icon: 'manage_accounts',label: 'Usuarios'   },
     { to: '/citas',     icon: 'calendar_month', label: 'Citas'      },
@@ -191,7 +193,7 @@ export default function MainLayout() {
   ];
 
   const titleMap: Record<string, string> = {
-    '/': 'Dashboard', '/patients': 'Pacientes', '/sales': 'Ventas',
+    '/': 'Dashboard', '/patients': 'Pacientes', '/sales': 'Ventas', '/pos': 'Punto de venta',
     '/appointments': 'Agenda', '/inventory': 'Inventario',
     '/movements': 'Movimientos', '/users': 'Usuarios', '/prescriptions': 'Recetas',
     '/citas': 'Citas', '/calendario': 'Calendario', '/reportes': 'Reportes',

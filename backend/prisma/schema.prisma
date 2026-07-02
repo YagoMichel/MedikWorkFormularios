@@ -62,6 +62,8 @@ enum SaleStatus {
   PENDIENTE_ENTREGA
   ENTREGADA
   CANCELADA
+  PENDIENTE
+  LIQUIDADA
 }
 
 enum PaymentMethod {
@@ -69,6 +71,7 @@ enum PaymentMethod {
   TARJETA
   TRANSFERENCIA
   COMBINADO
+  DEPOSITO
 }
 
 enum BatchStatus {
@@ -91,6 +94,7 @@ model User {
   appointments  Appointment[]  @relation("DoctorAppointments")
   prescriptions Prescription[] @relation("DoctorPrescriptions")
   sales         Sale[]         @relation("VendorSales")
+  abonos        Abono[]        @relation("UserAbonos")
   movements     Movement[]
   uploadedDocuments Document[]
 }
@@ -292,24 +296,41 @@ model Movement {
 }
 
 model Sale {
-  id             String        @id @default(cuid())
-  folio          String        @unique
-  patientId      String?
-  patient        Patient?      @relation(fields: [patientId], references: [id])
-  prescriptionId String?
-  prescription   Prescription? @relation(fields: [prescriptionId], references: [id])
-  vendorId       String
-  vendor         User          @relation("VendorSales", fields: [vendorId], references: [id])
-  items          SaleItem[]
-  subtotal       Float         @default(0)
-  discount       Float         @default(0)
-  tax            Float         @default(0)
-  total          Float         @default(0)
-  paymentMethod  PaymentMethod @default(EFECTIVO)
-  status         SaleStatus    @default(PAGADA)
-  notes          String?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  id                 String         @id @default(cuid())
+  folio              String         @unique
+  patientId          String?
+  patient            Patient?       @relation(fields: [patientId], references: [id])
+  prescriptionId     String?
+  prescription       Prescription?  @relation(fields: [prescriptionId], references: [id])
+  vendorId           String
+  vendor             User           @relation("VendorSales", fields: [vendorId], references: [id])
+  items              SaleItem[]
+  subtotal           Float          @default(0)
+  discount           Float          @default(0)
+  tax                Float          @default(0)
+  total              Float          @default(0)
+  deposit            Float          @default(0)
+  balance            Float          @default(0)
+  paymentMethod      PaymentMethod  @default(EFECTIVO)
+  depositMethod      PaymentMethod?
+  finalPaymentMethod PaymentMethod?
+  abonos             Abono[]
+  lensType           String?
+  lensEye            String?
+  pd                 String?
+  odEsf              String?
+  odCil              String?
+  odEje              String?
+  odAdd              String?
+  oiEsf              String?
+  oiCil              String?
+  oiEje              String?
+  oiAdd              String?
+  referralHospital   String?
+  status             SaleStatus     @default(PAGADA)
+  notes              String?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
 }
 
 model SaleItem {
@@ -322,6 +343,18 @@ model SaleItem {
   unitPrice Float
   discount  Float   @default(0)
   subtotal  Float
+}
+
+model Abono {
+  id        String        @id @default(cuid())
+  saleId    String
+  sale      Sale          @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  amount    Float
+  method    PaymentMethod @default(EFECTIVO)
+  notes     String?
+  userId    String
+  user      User          @relation("UserAbonos", fields: [userId], references: [id])
+  createdAt DateTime      @default(now())
 }
 
 // =========================================================
