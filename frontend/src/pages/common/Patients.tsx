@@ -12,16 +12,25 @@ import { Link } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+// Mismo valor centinela usado en la tablet para "sin empresa / particular"
+const SIN_EMPRESA = '__sin_empresa__';
+
 export default function Patients() {
   const [q, setQ] = useState('');
+  const [company, setCompany] = useState('');
   const [open, setOpen] = useState(false);
   const [editPatient, setEditPatient] = useState<null | { id: string; fullName: string; company: string }>(null);
   const [confirmDelete, setConfirmDelete] = useState<null | { id: string; name: string }>(null);
   const qc = useQueryClient();
 
+  const { data: companiesList = [] } = useQuery({
+    queryKey: ['companies'],
+    queryFn: async () => (await api.get('/companies')).data,
+  });
+
   const { data: patients = [] } = useQuery({
-    queryKey: ['patients', q],
-    queryFn: async () => (await api.get('/patients', { params: { q } })).data,
+    queryKey: ['patients', q, company],
+    queryFn: async () => (await api.get('/patients', { params: { q, company } })).data,
   });
 
   const create = useMutation({
@@ -49,7 +58,12 @@ export default function Patients() {
       </div>
       <div className="card">
         <div className="flex items-center gap-2 mb-3">
-          <input className="input" placeholder="Buscar por nombre o empresa" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input className="input flex-1" placeholder="Buscar por nombre" value={q} onChange={(e) => setQ(e.target.value)} />
+          <select className="input" style={{ maxWidth: 220 }} value={company} onChange={(e) => setCompany(e.target.value)}>
+            <option value="">Todas las empresas</option>
+            <option value={SIN_EMPRESA}>Sin empresa / Particulares</option>
+            {companiesList.map((c: any) => <option key={c.id} value={c.name}>{c.name}</option>)}
+          </select>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">

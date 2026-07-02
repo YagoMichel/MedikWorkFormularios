@@ -30,6 +30,19 @@ function loadMunicipiosDB(): Promise<MunicipiosDB | null> {
   return _municipiosP;
 }
 
+// Calcula la edad en años a partir de una fecha "yyyy-mm-dd" — se usa para
+// que la edad siempre coincida con la fecha de nacimiento, sin diferencias.
+function calcularEdad(fechaISO: string): string {
+  if (!fechaISO) return '';
+  const nacimiento = new Date(fechaISO + 'T00:00:00');
+  if (isNaN(nacimiento.getTime())) return '';
+  const hoy = new Date();
+  let edad = hoy.getFullYear() - nacimiento.getFullYear();
+  const mesDiff = hoy.getMonth() - nacimiento.getMonth();
+  if (mesDiff < 0 || (mesDiff === 0 && hoy.getDate() < nacimiento.getDate())) edad--;
+  return edad >= 0 ? String(edad) : '';
+}
+
 // ── Constantes ────────────────────────────────────────────────────────
 const BLOOD_TYPES = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'No sé'];
 const ESCOLARIDADES = ['Sin estudios','Primaria','Secundaria','Preparatoria / Bachillerato','Técnico / Tecnológico','Licenciatura','Maestría','Doctorado'];
@@ -267,6 +280,10 @@ function buildFormFromSurvey(survey: any): typeof empty {
     if (survey[k] != null) (f as any)[k] = survey[k];
   }
 
+  // Compatibilidad con encuestas guardadas antes de simplificar
+  // consumeDrogas a solo 'NO_NUNCA' | 'SI'
+  if (f.consumeDrogas === 'SI_CONSUMO' || f.consumeDrogas === 'CONSUMI') f.consumeDrogas = 'SI';
+
   // Booleanos
   if (survey.practicaDeporte != null) f.practicaDeporte = survey.practicaDeporte;
   if (survey.consumeAlcohol != null) f.consumeAlcohol = survey.consumeAlcohol;
@@ -275,8 +292,9 @@ function buildFormFromSurvey(survey: any): typeof empty {
   if (survey.usaAudifonos != null) f.usaAudifonos = survey.usaAudifonos;
   if (survey.trabajoMinas != null) f.trabajoMinas = survey.trabajoMinas;
 
-  // Edad
-  f.edad = survey.edad != null ? String(survey.edad) : '';
+  // Edad — si hay fecha de nacimiento, siempre se recalcula a partir de ella
+  // para que no queden desincronizadas
+  f.edad = f.fechaNacimiento ? calcularEdad(f.fechaNacimiento) : (survey.edad != null ? String(survey.edad) : '');
 
   // celular: "+52 8112345678" → lada + celular
   if (survey.celular) {
@@ -378,6 +396,13 @@ function buildFormFromSurvey(survey: any): typeof empty {
   // exposiciones e historial
   if (survey.exposiciones) f.exposiciones = { ...empty.exposiciones, ...survey.exposiciones };
   if (survey.historialEmpleos?.length) f.historialEmpleos = survey.historialEmpleos;
+
+  // Si algún empleo tiene una exposición marcada que no está reflejada en el
+  // checklist general (p. ej. encuestas guardadas antes de este ajuste),
+  // se refleja también ahí para que se vea seleccionada al editar.
+  const empleosExp = new Set<string>();
+  f.historialEmpleos.forEach((e: any) => (Array.isArray(e.exponentes) ? e.exponentes : []).forEach((x: string) => empleosExp.add(x)));
+  EXPOSICION_OPCIONES.forEach(([k, l]) => { if (empleosExp.has(l)) (f.exposiciones as any)[k] = true; });
 
   return f;
 }
@@ -783,6 +808,7 @@ export function SurveyEditorForm({ survey, patientId, companies, onSave }: Props
               <Field label="Empresa">
                 <select className="input" value={form.empresa} onChange={e => set('empresa', e.target.value)}>
                   <option value="">— Selecciona la empresa —</option>
+                  <option value="Sin empresa">Sin empresa</option>
                   {companies.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                 </select>
               </Field>
@@ -819,7 +845,10 @@ export function SurveyEditorForm({ survey, patientId, companies, onSave }: Props
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Edad">
                   <input className="input" type="number" min="0" max="120" placeholder="Ej. 32"
-                    value={form.edad} onChange={e => set('edad', e.target.value)} />
+                    value={form.edad} readOnly={!!form.fechaNacimiento}
+                    style={form.fechaNacimiento ? { background: 'var(--bg-elevated)', cursor: 'not-allowed' } : undefined}
+                    title={form.fechaNacimiento ? 'Se calcula a partir de la fecha de nacimiento' : undefined}
+                    onChange={e => set('edad', e.target.value)} />
                 </Field>
                 <Field label="Tipo de sangre">
                   <select className="input" value={form.tipoSangre} onChange={e => set('tipoSangre', e.target.value)}>
@@ -852,7 +881,10 @@ export function SurveyEditorForm({ survey, patientId, companies, onSave }: Props
 
               <Field label="Fecha de nacimiento">
                 <input className="input" type="date" value={form.fechaNacimiento}
-                  onChange={e => set('fechaNacimiento', e.target.value)} />
+                  onChange={e => {
+                    const fecha = e.target.value;
+                    setForm(f => ({ ...f, fechaNacimiento: fecha, edad: fecha ? calcularEdad(fecha) : f.edad }));
+                  }} />
               </Field>
 
               <div className="grid grid-cols-2 gap-4">
@@ -1376,7 +1408,7 @@ export function SurveyEditorForm({ survey, patientId, companies, onSave }: Props
                           ))}
                           <td className="pr-2 pb-2" style={{ minWidth: 180 }}>
                             <div className="flex flex-wrap gap-1">
-                              {EXPOSICION_OPCIONES.filter(([k]) => (form.exposiciones as any)[k]).map(([k, l]) => {
+                              {EXPOSICION_OPCIONES.filter(([k, l]) => (form.exposiciones as any)[k] || (emp.exponentes || []).includes(l)).map(([k, l]) => {
                                 const seleccionado = (emp.exponentes || []).includes(l);
                                 return (
                                   <button key={k} type="button"

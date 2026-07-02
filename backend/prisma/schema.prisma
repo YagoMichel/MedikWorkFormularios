@@ -92,6 +92,7 @@ model User {
   prescriptions Prescription[] @relation("DoctorPrescriptions")
   sales         Sale[]         @relation("VendorSales")
   movements     Movement[]
+  uploadedDocuments Document[]
 }
 
 model Patient {
@@ -117,6 +118,7 @@ model Patient {
   sales         Sale[]
   surveys       PatientSurvey[]
   medicalExams  MedicalExam[]
+  documents     Document[]
 
   @@index([companyId])
   @@index([nss])
@@ -147,6 +149,34 @@ model MedicalExam {
   updatedAt DateTime @updatedAt
 
   @@index([patientId])
+}
+
+enum DocumentType {
+  CUESTIONARIO
+  RESULTADOS
+  CONSENTIMIENTO
+  OTRO
+}
+
+// Expediente documental del paciente (cuestionario, resultados, hoja de
+// consentimiento, etc.). El archivo en sí vive en almacenamiento externo
+// (hoy disco local, a futuro OneDrive) — aquí solo se registra la referencia
+// para poder filtrar/buscar desde el sistema sin depender de cómo estén
+// organizadas las carpetas ahí.
+model Document {
+  id           String       @id @default(cuid())
+  patientId    String
+  patient      Patient      @relation(fields: [patientId], references: [id])
+  type         DocumentType
+  visitDate    DateTime     @default(now())
+  fileName     String
+  fileUrl      String
+  uploadedById String?
+  uploadedBy   User?        @relation(fields: [uploadedById], references: [id])
+  createdAt    DateTime     @default(now())
+
+  @@index([patientId])
+  @@index([visitDate])
 }
 
 model Appointment {

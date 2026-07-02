@@ -1,12 +1,13 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../services/api';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../stores/auth';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Eye, ArrowDown, HeartPulse, Droplet, FlaskConical, Baby, Stethoscope, Activity, Bone, FileDown } from 'lucide-react';
+import { ArrowLeft, Eye, ArrowDown, HeartPulse, Droplet, FlaskConical, Baby, Stethoscope, Activity, Bone, FileDown, CheckCircle2, AlertCircle, FileStack, ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
 import { SurveyEditorForm } from '../../components/SurveyEditorForm';
-import { downloadSurveyPdf } from '../../utils/surveyPdf';
+import { buildSurveyPdfBlob } from '../../utils/surveyPdf';
+import { buildExamPdfBlob } from '../../utils/examPdf';
 
 export default function PatientDetail() {
   const { id } = useParams();
@@ -30,8 +31,8 @@ export default function PatientDetail() {
   const tabs: any[] = [
     { k: 'survey', l: 'Datos del paciente' },
     { k: 'results', l: 'Resultados' },
-    { k: 'clinical', l: 'Historial clínico' },
     { k: 'documentos', l: 'Documentos' },
+    { k: 'clinical', l: 'Historial clínico' },
   ];
   if (user?.role === 'ADMIN') tabs.push({ k: 'sales', l: 'Compras' });
 
@@ -55,19 +56,7 @@ export default function PatientDetail() {
 
       {tab === 'results' && <MedicalExamTab patientId={p.id} />}
 
-      {tab === 'clinical' && (
-        <div className="card">
-          <h3 className="font-semibold mb-3">Citas</h3>
-          {p.appointments.map((a: any) => (
-            <div key={a.id} className="flex justify-between py-2 text-sm border-t border-slate-100">
-              <span>{new Date(a.date).toLocaleString()}</span>
-              <span>{a.doctor.fullName}</span>
-              <span>{a.status}</span>
-            </div>
-          ))}
-          {p.appointments.length === 0 && <p className="text-slate-500 text-sm">Sin consultas registradas.</p>}
-        </div>
-      )}
+      {tab === 'clinical' && <HistorialClinicoTab patient={p} />}
 
       {tab === 'sales' && (
         <div className="card">
@@ -136,6 +125,7 @@ function MedicalExamForm({ initial, onSave }: { initial?: any; onSave: (d: any) 
     antAndro: { ...EMPTY_EXAM.antAndro, ...(initial.antAndro || {}) },
     riesgoCardio: { ...EMPTY_EXAM.riesgoCardio, ...(initial.riesgoCardio || {}) },
     examenes: { ...EMPTY_EXAM.examenes, ...(initial.examenes || {}) },
+    ruffier: { ...EMPTY_EXAM.ruffier, ...(initial.ruffier || {}) },
     rayosX: { ...EMPTY_EXAM.rayosX, ...(initial.rayosX || {}) },
   } : EMPTY_EXAM);
 
@@ -552,33 +542,287 @@ function SurveyTab({ patientId, survey }: { patientId: string; survey: any }) {
 }
 
 // ── Documentos ────────────────────────────────────────────────────────
-function DocumentosTab({ survey, patient }: { survey: any; patient: any }) {
-  const [generando, setGenerando] = useState(false);
+// Documentos que debe tener todo paciente — se resalta cuando falta alguno
+const DOC_OBLIGATORIOS = [
+  { type: 'CUESTIONARIO', label: 'Cuestionario' },
+  { type: 'RESULTADOS', label: 'Resultados del examen' },
+  { type: 'CONSENTIMIENTO', label: 'Hoja de consentimiento' },
+];
 
-  const handleClick = async () => {
+function DocumentosTab({ survey, patient }: { survey: any; patient: any }) {
+  const qc = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [generando, setGenerando] = useState<string | null>(null);
+
+  const { data: docs = [] } = useQuery({
+    queryKey: ['documents', patient.id],
+    queryFn: async () => (await api.get('/documents', { params: { patientId: patient.id } })).data,
+  });
+
+  const { data: exams = [] } = useQuery({
+    queryKey: ['medical-exams', patient.id],
+    queryFn: async () => (await api.get('/medical-exams', { params: { patientId: patient.id } })).data,
+  });
+  const ultimoExamen = exams[0];
+
+  const ultimoDe = (type: string) =>
+    [...docs].filter((d: any) => d.type === type)
+      .sort((a: any, b: any) => new Date(b.visitDate).getTime() - new Date(a.visitDate).getTime())[0];
+
+  const subirArchivo = async (type: string, file: Blob, filename: string) => {
+    const form = new FormData();
+    form.append('file', file, filename);
+    form.append('patientId', patient.id);
+    form.append('type', type);
+    await api.post('/documents/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+    qc.invalidateQueries({ queryKey: ['documents', patient.id] });
+  };
+
+  const handleCuestionario = async () => {
     if (!survey || generando) return;
-    setGenerando(true);
+    setGenerando('CUESTIONARIO');
     try {
-      await downloadSurveyPdf(survey, patient);
+      const { blob, filename } = await buildSurveyPdfBlob(survey, patient);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+      URL.revokeObjectURL(url);
+      await subirArchivo('CUESTIONARIO', blob, filename);
+      toast.success('Cuestionario guardado en el expediente');
     } catch {
       toast.error('No se pudo generar el PDF');
     } finally {
-      setGenerando(false);
+      setGenerando(null);
+    }
+  };
+
+  const handleResultados = async () => {
+    if (!ultimoExamen || generando) return;
+    setGenerando('RESULTADOS');
+    try {
+      const { blob, filename } = await buildExamPdfBlob(ultimoExamen, patient);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+      URL.revokeObjectURL(url);
+      await subirArchivo('RESULTADOS', blob, filename);
+      toast.success('Resultados guardados en el expediente');
+    } catch {
+      toast.error('No se pudo generar el PDF');
+    } finally {
+      setGenerando(null);
+    }
+  };
+
+  const handleConsentimiento = async (file: File) => {
+    setGenerando('CONSENTIMIENTO');
+    try {
+      await subirArchivo('CONSENTIMIENTO', file, file.name);
+      toast.success('Hoja de consentimiento guardada');
+    } catch {
+      toast.error('No se pudo subir el archivo');
+    } finally {
+      setGenerando(null);
+    }
+  };
+
+  const handleCompleto = async () => {
+    try {
+      const res = await api.get(`/documents/${patient.id}/completo`, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url; a.download = `Expediente_completo_${patient.fullName.replace(/\s+/g, '_')}.pdf`; a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Este paciente todavía no tiene documentos para combinar');
     }
   };
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-      <div
-        className={`card flex flex-col items-center gap-2 p-6 text-center ${survey ? 'cursor-pointer hover:shadow-md transition' : 'opacity-50'}`}
-        onClick={handleClick}
-      >
-        <FileDown size={32} className={survey ? 'text-blue-600' : 'text-slate-300'} />
-        <div className="font-semibold text-sm">Encuesta</div>
-        <div className="text-xs text-slate-400">
-          {!survey ? 'El paciente aún no tiene encuesta capturada' : generando ? 'Generando PDF…' : 'Descargar historia clínica (PDF)'}
-        </div>
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {DOC_OBLIGATORIOS.map(({ type, label }) => {
+          const ultimo = ultimoDe(type);
+          const enProgreso = generando === type;
+          const clicable = type === 'CUESTIONARIO' ? !!survey : type === 'RESULTADOS' ? !!ultimoExamen : type === 'CONSENTIMIENTO';
+          const onClick = () => {
+            if (enProgreso) return;
+            if (type === 'CUESTIONARIO') handleCuestionario();
+            if (type === 'RESULTADOS') handleResultados();
+            if (type === 'CONSENTIMIENTO') fileInputRef.current?.click();
+          };
+          return (
+            <div key={type}
+              className={`relative card flex flex-col items-center gap-2 p-6 text-center ${clicable ? 'cursor-pointer hover:shadow-md transition' : 'opacity-60'}`}
+              onClick={onClick}>
+              <span className="absolute top-2 right-2">
+                {ultimo
+                  ? <CheckCircle2 size={16} className="text-emerald-500" />
+                  : <AlertCircle size={16} className="text-orange-500" />}
+              </span>
+              <FileDown size={32} className={ultimo ? 'text-blue-600' : 'text-slate-300'} />
+              <div className="font-semibold text-sm">{label}</div>
+              <div className="text-xs text-slate-400">
+                {enProgreso
+                  ? 'Procesando…'
+                  : ultimo
+                    ? `Última: ${new Date(ultimo.visitDate).toLocaleDateString('es-MX')}`
+                    : type === 'CUESTIONARIO' && !survey
+                      ? 'El paciente aún no tiene encuesta capturada'
+                      : type === 'RESULTADOS' && !ultimoExamen
+                        ? 'Falta — aún no hay resultados de examen capturados'
+                        : type === 'RESULTADOS'
+                          ? 'Generar y guardar en el expediente'
+                          : type === 'CONSENTIMIENTO'
+                            ? 'Falta — subir foto o escaneo'
+                            : 'Falta'}
+              </div>
+            </div>
+          );
+        })}
       </div>
+
+      <input ref={fileInputRef} type="file" accept="image/*,.pdf" className="hidden"
+        onChange={(e) => { if (e.target.files?.[0]) handleConsentimiento(e.target.files[0]); e.target.value = ''; }} />
+
+      {docs.length > 0 && (
+        <button onClick={handleCompleto} className="btn btn-primary text-sm flex items-center gap-2">
+          <FileStack size={16} /> Ver expediente completo (PDF)
+        </button>
+      )}
+    </div>
+  );
+}
+
+function HistorialClinicoTab({ patient }: { patient: any }) {
+  const { data: docs = [] } = useQuery({
+    queryKey: ['documents', patient.id],
+    queryFn: async () => (await api.get('/documents', { params: { patientId: patient.id } })).data,
+  });
+
+  return (
+    <div className="card">
+      <h3 className="font-semibold mb-3">Historial de visitas</h3>
+      <HistorialPorFecha patient={patient} docs={docs} />
+    </div>
+  );
+}
+
+// Orden de tipos dentro de un expediente (debe coincidir con backend/src/routes/documents.ts)
+const ORDEN_TIPOS: Record<string, number> = { CUESTIONARIO: 0, RESULTADOS: 1, CONSENTIMIENTO: 2, OTRO: 3 };
+
+function agruparPorFecha(docs: any[]) {
+  const porDia = new Map<string, any[]>();
+  docs.forEach((d) => {
+    const key = new Date(d.visitDate).toISOString().slice(0, 10);
+    if (!porDia.has(key)) porDia.set(key, []);
+    porDia.get(key)!.push(d);
+  });
+  const dias = Array.from(porDia.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+
+  const porMes = new Map<string, { mesLabel: string; dias: [string, any[]][] }>();
+  dias.forEach(([fecha, docsDelDia]) => {
+    const mesKey = fecha.slice(0, 7);
+    const mesLabel = new Date(fecha + 'T00:00:00').toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
+    if (!porMes.has(mesKey)) porMes.set(mesKey, { mesLabel, dias: [] });
+    porMes.get(mesKey)!.dias.push([fecha, docsDelDia]);
+  });
+  return Array.from(porMes.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+}
+
+// Vista de "carpetas": Año y mes → Día → expediente de esa visita, tal como se organizan en OneDrive
+function HistorialPorFecha({ patient, docs }: { patient: any; docs: any[] }) {
+  const qc = useQueryClient();
+  const [abierto, setAbierto] = useState<string | null>(null);
+
+  const borrarDocumento = async (doc: any) => {
+    const label = DOC_OBLIGATORIOS.find((o) => o.type === doc.type)?.label || 'documento';
+    if (!window.confirm(`¿Borrar este ${label.toLowerCase()} (${doc.fileName})? Esta acción no se puede deshacer.`)) return;
+    try {
+      await api.delete(`/documents/${doc.id}`);
+      await qc.invalidateQueries({ queryKey: ['documents', patient.id] });
+      toast.success('Documento borrado');
+    } catch {
+      toast.error('No se pudo borrar el documento');
+    }
+  };
+
+  const descargarCompleto = async (fecha: string) => {
+    try {
+      const res = await api.get(`/documents/${patient.id}/completo`, { params: { date: fecha }, responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url; a.download = `Expediente_${fecha}_${patient.fullName.replace(/\s+/g, '_')}.pdf`; a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error('No se pudo generar el expediente de esa fecha');
+    }
+  };
+
+  if (docs.length === 0) {
+    return <p className="text-sm text-slate-500">Este paciente aún no tiene documentos guardados.</p>;
+  }
+
+  const meses = agruparPorFecha(docs);
+
+  return (
+    <div className="space-y-5">
+      {meses.map(([mesKey, { mesLabel, dias }]) => (
+        <div key={mesKey}>
+          <h4 className="text-xs font-bold uppercase tracking-wide mb-2 capitalize" style={{ color: 'var(--text-muted)' }}>{mesLabel}</h4>
+          <div className="space-y-2">
+            {dias.map(([fecha, docsDelDia]) => {
+              const expandido = abierto === fecha;
+              const tiposPresentes = new Set(docsDelDia.map((d: any) => d.type));
+              return (
+                <div key={fecha} className="card p-0 overflow-hidden">
+                  <button
+                    className="w-full flex items-center justify-between p-4 text-left hover:bg-slate-50 dark:hover:bg-slate-800/50 transition"
+                    onClick={() => setAbierto(expandido ? null : fecha)}
+                  >
+                    <div className="flex items-center gap-3">
+                      {expandido ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                      <div>
+                        <div className="font-semibold text-sm capitalize">
+                          {new Date(fecha + 'T00:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}
+                        </div>
+                        <div className="text-xs text-slate-400">
+                          {DOC_OBLIGATORIOS.filter((o) => tiposPresentes.has(o.type)).map((o) => o.label).join(' · ') || 'Documentos'}
+                        </div>
+                      </div>
+                    </div>
+                    <span className="text-xs text-slate-400">{docsDelDia.length} documento{docsDelDia.length !== 1 ? 's' : ''}</span>
+                  </button>
+
+                  {expandido && (
+                    <div className="border-t border-slate-100 dark:border-slate-700 p-4 space-y-2">
+                      {docsDelDia
+                        .slice()
+                        .sort((a: any, b: any) => (ORDEN_TIPOS[a.type] ?? 9) - (ORDEN_TIPOS[b.type] ?? 9))
+                        .map((d: any) => (
+                          <div key={d.id} className="flex items-center justify-between text-sm p-2 rounded hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                            <a href={d.fileUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 min-w-0">
+                              <FileDown size={14} className="text-blue-500 shrink-0" />
+                              {DOC_OBLIGATORIOS.find((o) => o.type === d.type)?.label || 'Otro documento'}
+                              <span className="text-slate-400 text-xs truncate">— {d.fileName}</span>
+                            </a>
+                            <div className="flex items-center gap-3 shrink-0">
+                              <span className="text-xs text-slate-400">{d.uploadedBy?.fullName || ''}</span>
+                              <button onClick={() => borrarDocumento(d)} title="Borrar este documento" className="text-slate-400 hover:text-red-500 transition">
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      <button onClick={() => descargarCompleto(fecha)} className="btn btn-primary text-xs flex items-center gap-2 mt-2">
+                        <FileStack size={14} /> Ver expediente completo de este día
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

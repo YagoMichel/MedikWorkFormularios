@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import logo from '../assets/logo.png';
+import logoCompleto from '../assets/logo_completo.png';
 
 // ── Generación de la Historia Clínica (encuesta) como archivo .pdf real ──
 // Usa jsPDF + autoTable (texto vectorial, no una captura de pantalla) para
@@ -56,14 +56,33 @@ function parseDrogas(s: any) {
   });
 }
 
-async function loadImageDataUrl(url: string): Promise<string> {
+// Si `maxWidthPx` viene definido, la imagen se reescala con un canvas antes
+// de convertirla a data URL — evita incrustar en el PDF una imagen a su
+// resolución original (varios MB) cuando en la página se ve chiquita.
+async function loadImageDataUrl(url: string, maxWidthPx?: number): Promise<string> {
   const res = await fetch(url);
   const blob = await res.blob();
-  return await new Promise((resolve, reject) => {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = reject;
     reader.readAsDataURL(blob);
+  });
+  if (!maxWidthPx) return dataUrl;
+  return await new Promise<string>((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxWidthPx / img.width);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { resolve(dataUrl); return; }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
   });
 }
 
@@ -110,6 +129,37 @@ function sectionList(doc: jsPDF, startY: number, title: string, colTitles: strin
     body: rows,
     theme: 'grid',
     styles: { fontSize: 7, cellPadding: 1.3, lineColor: [203, 213, 225], lineWidth: 0.1 },
+    margin: { left: MARGIN, right: MARGIN },
+  });
+  return (doc as any).lastAutoTable.finalY + 3;
+}
+
+// Sección con varias categorías en columnas lado a lado (label:valor cada
+// una), p. ej. "Hábitos de consumo" dividido en Alcohol / Tabaquismo / Drogas
+function sectionCategorias(doc: jsPDF, startY: number, title: string, categorias: { titulo: string; pares: [string, any][] }[]): number {
+  const maxFilas = Math.max(...categorias.map((c) => c.pares.length));
+  const body: any[] = [];
+  for (let i = 0; i < maxFilas; i++) {
+    const fila: any[] = [];
+    categorias.forEach((c) => {
+      const [label, value] = c.pares[i] || ['', ''];
+      fila.push(label, label ? cleanText(value) : '');
+    });
+    body.push(fila);
+  }
+  const columnStyles: Record<number, any> = {};
+  categorias.forEach((_, i) => { columnStyles[i * 2] = { fontStyle: 'bold', textColor: LABEL_TEXT, cellWidth: 28 }; });
+
+  autoTable(doc, {
+    startY,
+    head: [
+      titleRow(title, categorias.length * 2) as any,
+      categorias.map((c) => ({ content: c.titulo, colSpan: 2, styles: { fillColor: SUBHEAD_BG, textColor: TITLE_TEXT, fontStyle: 'bold' as const, fontSize: 7 } })) as any,
+    ],
+    body,
+    theme: 'grid',
+    styles: { fontSize: 7, cellPadding: 1.3, lineColor: [203, 213, 225], lineWidth: 0.1 },
+    columnStyles,
     margin: { left: MARGIN, right: MARGIN },
   });
   return (doc as any).lastAutoTable.finalY + 3;
@@ -217,30 +267,30 @@ function sectionLaboral(doc: jsPDF, startY: number, s: any, empleos: any[]): num
   return (doc as any).lastAutoTable.finalY + 3;
 }
 
-export async function downloadSurveyPdf(survey: any, patient: any) {
+// Construye el PDF y regresa el blob + nombre sugerido, sin descargarlo —
+// lo usa downloadSurveyPdf (descarga al equipo) y también quien lo quiera
+// subir al expediente documental del paciente.
+export async function buildSurveyPdfBlob(survey: any, patient: any): Promise<{ blob: Blob; filename: string }> {
   const s = survey || {};
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
 
   let y = 10;
+  const logoW = 46, logoH = 12; // proporción real del logo completo (3038x793)
   try {
-    const logoData = await loadImageDataUrl(logo);
-    doc.addImage(logoData, 'PNG', MARGIN, y - 3, 16, 16);
+    const logoData = await loadImageDataUrl(logoCompleto, 600);
+    doc.addImage(logoData, 'PNG', MARGIN, y, logoW, logoH);
   } catch { /* si falla la carga del logo, se omite */ }
 
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.setTextColor(51, 117, 200);
-  doc.text('MediWork', MARGIN + 20, y + 3);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(100, 116, 139);
-  doc.text('Historia Clínica — Cuestionario del paciente', MARGIN + 20, y + 8);
+  doc.text('Historia Clínica — Cuestionario del paciente', MARGIN, y + logoH + 5);
 
   doc.setFontSize(8);
   const fecha = s.createdAt ? new Date(s.createdAt).toLocaleDateString('es-MX') : '—';
-  doc.text(`Fecha del cuestionario: ${fecha}`, PAGE_W - MARGIN, y + 3, { align: 'right' });
+  doc.text(`Fecha del cuestionario: ${fecha}`, PAGE_W - MARGIN, y + 4, { align: 'right' });
 
-  y += 15;
+  y += logoH + 9;
   doc.setDrawColor(51, 117, 200);
   doc.setLineWidth(0.6);
   doc.line(MARGIN, y, PAGE_W - MARGIN, y);
@@ -277,13 +327,31 @@ export async function downloadSurveyPdf(survey: any, patient: any) {
     ['Especifique (sueño)', s.especifiqueSueno], ['', ''],
   ]);
 
-  y = sectionField(doc, y, 'Hábitos de consumo', [
-    ['Tabaquismo', s.fuma === 'SI' ? 'Sí' : s.fuma === 'EXFUMADOR' ? 'Exfumador/a' : s.fuma === 'NO' ? 'No' : '—'],
-    ['Edad de inicio', s.edadInicioFuma],
-    ['Años fumando', s.anosFumando], ['Cigarros al día', s.cigarrosDia],
-    ['Consume alcohol', bool(s.consumeAlcohol)], ['Tipo de bebida', s.tipoBebida],
-    ['Cantidad', s.cantidadBebidas], ['Frecuencia', s.frecuenciaAlcohol],
-    ['Consume o consumió drogas', s.consumeDrogas === 'SI' ? 'Sí' : s.consumeDrogas === 'NO_NUNCA' ? 'No, nunca' : '—'], ['', ''],
+  y = sectionCategorias(doc, y, 'Hábitos de consumo', [
+    {
+      titulo: 'Alcohol',
+      pares: [
+        ['Consume alcohol', bool(s.consumeAlcohol)],
+        ['Tipo de bebida', s.tipoBebida],
+        ['Cantidad', s.cantidadBebidas],
+        ['Frecuencia', s.frecuenciaAlcohol],
+      ],
+    },
+    {
+      titulo: 'Tabaquismo',
+      pares: [
+        ['Tabaquismo', s.fuma === 'SI' ? 'Sí' : s.fuma === 'EXFUMADOR' ? 'Exfumador/a' : s.fuma === 'NO' ? 'No' : '—'],
+        ['Edad de inicio', s.edadInicioFuma],
+        ['Años fumando', s.anosFumando],
+        ['Cigarros al día', s.cigarrosDia],
+      ],
+    },
+    {
+      titulo: 'Drogas',
+      pares: [
+        ['Consume/consumió', s.consumeDrogas === 'SI' ? 'Sí' : s.consumeDrogas === 'NO_NUNCA' ? 'No, nunca' : '—'],
+      ],
+    },
   ]);
 
   const drogas = parseDrogas(s);
@@ -336,5 +404,18 @@ export async function downloadSurveyPdf(survey: any, patient: any) {
   doc.text('Documento generado a partir del cuestionario médico capturado por el paciente — MediWork', PAGE_W / 2, 290, { align: 'center' });
 
   const safeName = (s.nombre || patient?.fullName || 'paciente').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w]+/g, '_');
-  doc.save(`Encuesta_${safeName}.pdf`);
+  const filename = `Encuesta_${safeName}.pdf`;
+  const blob = doc.output('blob');
+  return { blob, filename };
+}
+
+// Descarga el PDF directo al equipo (comportamiento original del botón)
+export async function downloadSurveyPdf(survey: any, patient: any) {
+  const { blob, filename } = await buildSurveyPdfBlob(survey, patient);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }

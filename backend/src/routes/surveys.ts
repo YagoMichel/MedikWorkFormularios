@@ -65,9 +65,14 @@ router.post('/', async (req: AuthRequest, res) => {
         cp: d.cp,
         practicaDeporte: d.practicaDeporte ?? null,
         cualDeporte: d.cualDeporte,
+        frecuenciaDeporte: d.frecuenciaDeporte,
         horasDeporte: d.horasDeporte,
         habitosAlimenticios: d.habitosAlimenticios,
+        comidasDia: d.comidasDia,
+        consumeFrutasVerduras: d.consumeFrutasVerduras,
+        aguaDia: d.aguaDia,
         calidadSueno: d.calidadSueno,
+        horasSueno: d.horasSueno,
         especifiqueSueno: d.especifiqueSueno,
         fuma: d.fuma,
         edadInicioFuma: d.edadInicioFuma,
@@ -91,6 +96,7 @@ router.post('/', async (req: AuthRequest, res) => {
         antecedentesFamiliares: d.antecedentesFamiliares,
         edadInicioLaboral: d.edadInicioLaboral,
         trabajoMinas: d.trabajoMinas,
+        tiempoMinas: d.tiempoMinas,
         exposiciones: d.exposiciones,
         historialEmpleos: d.historialEmpleos,
         antecedentesPatologicos: d.antecedentesPatologicos,
@@ -120,6 +126,20 @@ router.get('/', async (req: AuthRequest, res) => {
 router.put('/:id', async (req, res) => {
   const d = req.body;
   try {
+    // Mantener sincronizados los datos básicos del paciente (se editaban en
+    // el POST al crear, pero no aquí al actualizar una encuesta existente)
+    if (d.patientId) {
+      await prisma.patient.update({
+        where: { id: d.patientId },
+        data: {
+          phone: d.celular || undefined,
+          email: d.correo || undefined,
+          nss: d.nss || undefined,
+          company: d.empresa || undefined,
+        },
+      });
+    }
+
     const survey = await prisma.patientSurvey.update({
       where: { id: req.params.id },
       data: {
@@ -130,8 +150,10 @@ router.put('/:id', async (req, res) => {
         lugarNacimiento: d.lugarNacimiento, correo: d.correo,
         calle: d.calle, numero: d.numero, colonia: d.colonia, municipio: d.municipio, cp: d.cp,
         practicaDeporte: d.practicaDeporte ?? null, cualDeporte: d.cualDeporte,
-        horasDeporte: d.horasDeporte, habitosAlimenticios: d.habitosAlimenticios,
-        calidadSueno: d.calidadSueno, especifiqueSueno: d.especifiqueSueno,
+        frecuenciaDeporte: d.frecuenciaDeporte, horasDeporte: d.horasDeporte,
+        habitosAlimenticios: d.habitosAlimenticios, comidasDia: d.comidasDia,
+        consumeFrutasVerduras: d.consumeFrutasVerduras, aguaDia: d.aguaDia,
+        calidadSueno: d.calidadSueno, horasSueno: d.horasSueno, especifiqueSueno: d.especifiqueSueno,
         fuma: d.fuma, edadInicioFuma: d.edadInicioFuma, anosFumando: d.anosFumando, cigarrosDia: d.cigarrosDia,
         consumeAlcohol: d.consumeAlcohol ?? null, tipoBebida: d.tipoBebida,
         cantidadBebidas: d.cantidadBebidas, frecuenciaAlcohol: d.frecuenciaAlcohol,
@@ -141,7 +163,7 @@ router.put('/:id', async (req, res) => {
         marcaVacuna: d.marcaVacuna, tieneTatuajes: d.tieneTatuajes ?? null,
         ultimoTatuaje: d.ultimoTatuaje, usaAudifonos: d.usaAudifonos ?? null,
         antecedentesFamiliares: d.antecedentesFamiliares, edadInicioLaboral: d.edadInicioLaboral,
-        trabajoMinas: d.trabajoMinas, exposiciones: d.exposiciones,
+        trabajoMinas: d.trabajoMinas, tiempoMinas: d.tiempoMinas, exposiciones: d.exposiciones,
         historialEmpleos: d.historialEmpleos, antecedentesPatologicos: d.antecedentesPatologicos,
       },
     });

@@ -22,13 +22,27 @@ const patientSchema = z.object({
 
 const SIN_EMPRESA = '__sin_empresa__';
 
+// Quita acentos/diacríticos para que la búsqueda "Maria" también encuentre "María"
+const normalizar = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
 router.get('/', async (req, res) => {
   const q = (req.query.q as string) || '';
   const company = (req.query.company as string) || '';
   const filters: any[] = [{ NOT: { fullName: { startsWith: 'Trabajador ', mode: 'insensitive' as const } } }];
   if (company === SIN_EMPRESA) filters.push({ OR: [{ company: null }, { company: '' }] });
   else if (company) filters.push({ company: { equals: company, mode: 'insensitive' as const } });
-  if (q) filters.push({ OR: [{ fullName: { contains: q, mode: 'insensitive' } }, { phone: { contains: q } }] });
+
+  if (q) {
+    const candidatos = await prisma.patient.findMany({
+      where: { AND: filters },
+      orderBy: { createdAt: 'desc' },
+    });
+    const qNorm = normalizar(q);
+    const patients = candidatos
+      .filter(p => normalizar(p.fullName).includes(qNorm) || (p.phone && p.phone.includes(q)))
+      .slice(0, 100);
+    return res.json(patients);
+  }
 
   const patients = await prisma.patient.findMany({
     where: { AND: filters },

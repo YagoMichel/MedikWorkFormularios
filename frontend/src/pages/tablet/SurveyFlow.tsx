@@ -39,6 +39,19 @@ function loadMunicipiosDB(): Promise<MunicipiosDB | null> {
 // Valor centinela para buscar pacientes sin empresa asignada (particulares / sala general)
 const SIN_EMPRESA = '__sin_empresa__';
 
+// Calcula la edad en años a partir de una fecha "yyyy-mm-dd" — se usa para
+// que la edad siempre coincida con la fecha de nacimiento, sin diferencias.
+function calcularEdad(fechaISO: string): string {
+  if (!fechaISO) return '';
+  const nacimiento = new Date(fechaISO + 'T00:00:00');
+  if (isNaN(nacimiento.getTime())) return '';
+  const hoy = new Date();
+  let edad = hoy.getFullYear() - nacimiento.getFullYear();
+  const mesDiff = hoy.getMonth() - nacimiento.getMonth();
+  if (mesDiff < 0 || (mesDiff === 0 && hoy.getDate() < nacimiento.getDate())) edad--;
+  return edad >= 0 ? String(edad) : '';
+}
+
 const BLOOD_TYPES = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'No sé'];
 const ESCOLARIDADES = [
   'Sin estudios', 'Primaria', 'Secundaria',
@@ -1265,6 +1278,7 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
           <Field label="Empresa">
             <select className="input" value={form.empresa} onChange={e => set('empresa', e.target.value)}>
               <option value="">— Selecciona tu empresa —</option>
+              <option value="Sin empresa">Sin empresa</option>
               {companies.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
             </select>
           </Field>
@@ -1303,7 +1317,10 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
           <div className="grid grid-cols-2 gap-4">
             <Field label="Edad">
               <input className="input" type="number" min="0" max="120" placeholder="Ej. 32"
-                value={form.edad} onChange={e => set('edad', e.target.value)} />
+                value={form.edad} readOnly={!!form.fechaNacimiento}
+                style={form.fechaNacimiento ? { background: 'var(--bg-elevated)', cursor: 'not-allowed' } : undefined}
+                title={form.fechaNacimiento ? 'Se calcula a partir de la fecha de nacimiento' : undefined}
+                onChange={e => set('edad', e.target.value)} />
             </Field>
             <Field label="Tipo de sangre">
               <select className="input" value={form.tipoSangre} onChange={e => set('tipoSangre', e.target.value)}>
@@ -1347,7 +1364,11 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
 
           <Field label="Fecha de nacimiento">
             <input className="input" type="date"
-              value={form.fechaNacimiento} onChange={e => set('fechaNacimiento', e.target.value)} />
+              value={form.fechaNacimiento}
+              onChange={e => {
+                const fecha = e.target.value;
+                setForm(f => ({ ...f, fechaNacimiento: fecha, edad: fecha ? calcularEdad(fecha) : f.edad }));
+              }} />
           </Field>
 
           <div className="grid grid-cols-2 gap-4">
@@ -2051,7 +2072,7 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
                       ))}
                       <td className="pr-2 pb-2" style={{ minWidth: 180 }}>
                         <div className="flex flex-wrap gap-1">
-                          {EXPOSICION_OPCIONES.filter(([k]) => (form.exposiciones as any)[k]).map(([k, l]) => {
+                          {EXPOSICION_OPCIONES.filter(([k, l]) => (form.exposiciones as any)[k] || (emp.exponentes || []).includes(l)).map(([k, l]) => {
                             const seleccionado = (emp.exponentes || []).includes(l);
                             return (
                               <button key={k} type="button"

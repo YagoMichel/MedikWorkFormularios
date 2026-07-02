@@ -27,6 +27,7 @@ import agent        from './routes/agent';
 import batches      from './routes/batches';
 import surveys      from './routes/surveys';
 import medicalExams from './routes/medicalExams';
+import documents    from './routes/documents';
 
 const app = express();
 
@@ -191,6 +192,7 @@ app.use('/api/appointments', appointments);  // Citas
 app.use('/api/prescriptions',prescriptions); // Recetas
 app.use('/api/surveys',      surveys);       // Encuestas medicas
 app.use('/api/medical-exams',medicalExams);  // Examenes medicos
+app.use('/api/documents',    documents);     // Expediente documental (encuesta, resultados, consentimiento)
 
 // -- Admin --
 app.use('/api/inventory',    inventory);     // Inventario de productos
