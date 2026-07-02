@@ -20,9 +20,17 @@ router.use(authRequired);
 
 // POST /api/batches — crear batch (accesible por DOCTOR y ADMIN)
 router.post('/', async (req: AuthRequest, res) => {
-  const { companyId, date, expectedCount, notes } = req.body;
+  let { companyId, date, expectedCount, notes } = req.body;
   if (!companyId || !date || !expectedCount) {
     return res.status(400).json({ error: 'Faltan campos requeridos' });
+  }
+
+  if (companyId === 'SIN_EMPRESA') {
+    let dummy = await prisma.company.findFirst({ where: { name: 'Sin Empresa' } });
+    if (!dummy) {
+      dummy = await prisma.company.create({ data: { name: 'Sin Empresa', notes: 'Para citas individuales.' } });
+    }
+    companyId = dummy.id;
   }
   const batch = await prisma.companyBatch.create({
     data: {
@@ -52,6 +60,21 @@ router.get('/', async (req: AuthRequest, res) => {
   res.json(batches);
 });
 
+router.put('/:id', async (req: AuthRequest, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+  
+  if (status === 'CERRADO') {
+    const updated = await prisma.companyBatch.update({
+      where: { id },
+      data: { status: 'CERRADO' }
+    });
+    return res.json(updated);
+  }
+  
+  return res.status(403).json({ error: 'Solo se puede actualizar a CERRADO desde este endpoint' });
+});
+
 router.use(requireRole('ADMIN'));
 
 // POST /api/batches/:id/confirm-admin — confirmar batch y crear citas
@@ -70,6 +93,8 @@ router.post('/:id/confirm-admin', async (req: AuthRequest, res) => {
   // Si ya hay citas, solo actualizar su status
   if (batch.appointments.length > 0) {
     await prisma.appointment.updateMany({ where: { batchId: id }, data: { status: 'CONFIRMADA' } });
+    const { emit } = await import('../socket');
+    emit('batch:confirmed', { id: batch.id, company: batch.company.name, created: 0 });
     return res.json({ ok: true, created: 0 });
   }
 

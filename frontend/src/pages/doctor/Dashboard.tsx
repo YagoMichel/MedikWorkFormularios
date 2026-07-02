@@ -5,12 +5,21 @@ import { Link } from 'react-router-dom';
 import { Users, Calendar as CalendarIcon, Clock, TrendingUp, CalendarCheck, Shield, ChevronRight, UserPlus, FileText, ClipboardList } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 export default function DoctorDashboard() {
   const user = useAuth((s) => s.user);
   const qc = useQueryClient();
   const [showActivityModal, setShowActivityModal] = useState(false);
+  const [showPhotoModal, setShowPhotoModal] = useState(false);
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (user?.id) {
+      const savedPhoto = localStorage.getItem(`profile_photo_${user.id}`);
+      if (savedPhoto) setProfilePhoto(savedPhoto);
+    }
+  }, [user?.id]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard-doctor'],
@@ -26,6 +35,18 @@ export default function DoctorDashboard() {
       toast.success('Estado actualizado');
     },
     onError: () => toast.error('Error al actualizar'),
+  });
+
+  const updateBatchStatus = useMutation({
+    mutationFn: async ({ id, status }: { id: string, status: string }) => {
+      return (await api.put(`/batches/${id}`, { status })).data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['dashboard-doctor'] });
+      qc.invalidateQueries({ queryKey: ['doctor-calendar'] });
+      toast.success('Jornada completada exitosamente');
+    },
+    onError: () => toast.error('Error al completar la jornada'),
   });
 
   if (isLoading || !data) return <div className="flex items-center justify-center h-full text-slate-400">Cargando...</div>;
@@ -45,55 +66,64 @@ export default function DoctorDashboard() {
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6 fade-in">
       {/* Banner de Bienvenida */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#f0f7ff] to-[#e0f0ff] dark:from-slate-800 dark:to-slate-900 border border-blue-50 dark:border-slate-700 p-8 flex justify-between items-center shadow-sm">
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#2560aa] to-[#51abcd] dark:from-slate-800 dark:to-slate-900 p-8 md:p-10 flex justify-between items-center shadow-sm border border-slate-100 dark:border-slate-800">
         <div className="z-10 max-w-xl">
-          <h1 className="text-3xl font-extrabold text-slate-800 dark:text-white mb-2 flex items-center gap-2">
-            ¡{getGreeting()}, {user?.fullName?.split(' ')[0] || 'Doctor'}! <span className="text-2xl">👋</span>
+          <h1 className="text-4xl font-extrabold text-white mb-3 flex items-center gap-3 drop-shadow-sm">
+            ¡{getGreeting()}, {user?.fullName?.split(' ')[0] || 'Doctor'}! <span className="text-3xl animate-bounce">👋</span>
           </h1>
-          <p className="text-slate-600 dark:text-slate-400">
-            Aquí tienes un resumen de tu actividad del día de hoy.
+          <p className="text-white/90 text-lg font-medium">
+            Aquí tienes un resumen de tu actividad y citas para el día de hoy.
           </p>
         </div>
-        <div className="absolute right-0 bottom-0 opacity-20 pointer-events-none transform translate-x-4 translate-y-4">
-          <ClipboardList size={220} className="text-blue-500" />
+        
+        {/* Avatar */}
+        <div className="relative z-10 hidden sm:block shrink-0">
+          <button onClick={() => setShowPhotoModal(true)} className="block w-28 h-28 rounded-full flex items-center justify-center text-3xl font-extrabold text-[#2560aa] shadow-2xl overflow-hidden border-4 border-white bg-white transition-transform hover:scale-105 cursor-pointer">
+            {profilePhoto ? (
+              <img src={profilePhoto} alt="Profile" className="w-full h-full object-cover" />
+            ) : (
+              user?.fullName?.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || 'U'
+            )}
+          </button>
+        </div>
+
+        <div className="absolute right-0 bottom-0 opacity-10 pointer-events-none transform translate-x-4 translate-y-4">
+          <ClipboardList size={260} className="text-white" />
         </div>
       </div>
 
       {/* Tarjetas de Métricas */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Pacientes */}
-        <div className="card rounded-2xl p-5 flex flex-col gap-3 shadow-sm hover:shadow-md transition">
-          <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-500 flex items-center justify-center mb-1">
-            <Users size={20} />
+        <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 dark:border-slate-700 flex items-center gap-5 hover:-translate-y-1 transition-transform duration-300">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#2560aa]/10 to-[#51abcd]/10 dark:from-[#2560aa]/30 dark:to-[#51abcd]/30 text-[#2560aa] flex items-center justify-center shrink-0">
+            <Users size={28} strokeWidth={2} />
           </div>
           <div>
-            <div className="text-xs text-slate-400 font-medium mb-0.5">Pacientes</div>
-            <div className="text-2xl font-extrabold text-blue-600 dark:text-blue-400">{data.totalPacientes}</div>
-            <div className="text-[11px] text-slate-400 mt-0.5">Total en sistema</div>
+            <div className="text-sm text-slate-500 font-semibold mb-1">Pacientes en sistema</div>
+            <div className="text-3xl font-extrabold text-slate-800 dark:text-white">{data.totalPacientes}</div>
           </div>
         </div>
         {/* Citas del mes */}
-        <div className="card rounded-2xl p-5 flex flex-col gap-3 shadow-sm hover:shadow-md transition">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 text-emerald-500 flex items-center justify-center mb-1">
-            <CalendarIcon size={20} />
+        <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 dark:border-slate-700 flex items-center gap-5 hover:-translate-y-1 transition-transform duration-300">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#51abcd]/10 to-[#2560aa]/10 text-[#51abcd] flex items-center justify-center shrink-0">
+            <CalendarIcon size={28} strokeWidth={2} />
           </div>
           <div>
-            <div className="text-xs text-slate-400 font-medium mb-0.5">Citas del mes</div>
-            <div className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">{data.citasMes}</div>
-            <div className="text-[11px] text-slate-400 mt-0.5">Agendadas</div>
+            <div className="text-sm text-slate-500 font-semibold mb-1">Citas este mes</div>
+            <div className="text-3xl font-extrabold text-slate-800 dark:text-white">{data.citasMes}</div>
           </div>
         </div>
         {/* Consultas hoy */}
-        <div className="card rounded-2xl p-5 flex flex-col gap-3 shadow-sm hover:shadow-md transition">
-          <div className="w-10 h-10 rounded-xl bg-orange-50 dark:bg-orange-900/30 text-orange-500 flex items-center justify-center mb-1">
-            <TrendingUp size={20} />
+        <div className="bg-white dark:bg-slate-800 rounded-3xl p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 dark:border-slate-700 flex items-center gap-5 hover:-translate-y-1 transition-transform duration-300">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500/10 to-teal-500/10 text-emerald-500 flex items-center justify-center shrink-0">
+            <TrendingUp size={28} strokeWidth={2} />
           </div>
           <div>
-            <div className="text-xs text-slate-400 font-medium mb-0.5">Consultas hoy</div>
-            <div className="text-2xl font-extrabold text-orange-600 dark:text-orange-400">
-              {data.stats.total} <span className="text-sm font-medium text-orange-400/80">/ 25</span>
+            <div className="text-sm text-slate-500 font-semibold mb-1">Consultas hoy</div>
+            <div className="text-3xl font-extrabold text-slate-800 dark:text-white">
+              {data.stats.total} <span className="text-lg font-medium text-slate-400">/ 25</span>
             </div>
-            <div className="text-[11px] text-slate-400 mt-0.5">{data.stats.total === 0 ? 'Aún no hay consultas' : `${data.stats.atendidas} atendidas`}</div>
           </div>
         </div>
       </div>
@@ -101,114 +131,130 @@ export default function DoctorDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Columna Izquierda: Consultas de hoy y Consejo */}
         <div className="space-y-6 flex flex-col">
-          <div className="card rounded-2xl p-6 shadow-sm flex flex-col h-[400px]">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-sm font-bold flex items-center gap-2 text-slate-800 dark:text-slate-200">
-                <Users size={18} className="text-slate-400" /> Consultas de hoy
+          <div className="bg-white dark:bg-slate-800 rounded-3xl p-7 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 dark:border-slate-700 flex flex-col h-[420px]">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-lg font-extrabold flex items-center gap-2 text-slate-800 dark:text-slate-100">
+                <Users size={20} className="text-[#2560aa]" /> Consultas programadas
               </h3>
-              <div className="text-[11px] font-bold bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 px-3 py-1 rounded-full border border-orange-100 dark:border-orange-800/50">
-                {data.stats.total} / 25
+              <div className="text-xs font-bold bg-[#51abcd]/10 text-[#2560aa] px-4 py-1.5 rounded-full">
+                {data.stats.total} pendientes
               </div>
             </div>
             
-            <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
-              {data.todays && data.todays.length > 0 ? (
-                data.todays.map((cita: any) => {
+            <div className="flex-1 overflow-y-auto pr-3 space-y-3 custom-scrollbar">
+              {(() => {
+                const combined = [
+                  ...(data.todays || []),
+                  ...(data.todaysBatches || []).map((b: any) => ({ ...b, isBatch: true }))
+                ].sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+                if (combined.length === 0) {
+                  return (
+                    <div className="h-full flex flex-col items-center justify-center text-center text-slate-400 text-sm p-4">
+                      <div className="w-14 h-14 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center mb-3">
+                        <CalendarCheck size={24} className="text-slate-300" />
+                      </div>
+                      <p className="font-medium text-slate-500">No hay consultas ni jornadas programadas para hoy.</p>
+                    </div>
+                  );
+                }
+
+                return combined.map((cita: any) => {
+                  const isBatch = cita.isBatch;
+                  const title = isBatch ? (cita.company?.name === 'Sin Empresa' ? 'Citas Individuales (Jornada)' : `Jornada: ${cita.company?.name || 'Empresa'}`) : (cita.patient?.fullName || 'Paciente');
+                  const subtitle = isBatch ? `${cita.expectedCount} pacientes esperados` : cita.status;
+                  const initial = isBatch ? 'J' : (cita.patient?.fullName?.charAt(0).toUpperCase() || 'P');
+                  
                   const hora = new Date(cita.date).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
                   return (
-                    <div key={cita.id} className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3 border border-slate-100 dark:border-slate-700 flex justify-between items-center transition hover:border-blue-200 dark:hover:border-blue-800/50">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-xs shrink-0">
-                          {cita.patient?.fullName?.charAt(0).toUpperCase() || 'P'}
+                    <div key={isBatch ? `b-${cita.id}` : cita.id} className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-4 border border-slate-100 dark:border-slate-700 flex justify-between items-center transition hover:shadow-md hover:border-[#51abcd]/30 group">
+                      <div className="flex items-center gap-4">
+                        <div className={`w-10 h-10 rounded-full ${isBatch ? 'bg-gradient-to-br from-[#51abcd] to-[#2560aa]' : 'bg-gradient-to-br from-[#2560aa] to-[#51abcd]'} text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-sm`}>
+                          {initial}
                         </div>
                         <div className="min-w-0">
-                          <div className="text-[13px] font-bold text-slate-800 dark:text-white truncate max-w-[140px] sm:max-w-[200px]">{cita.patient?.fullName || 'Paciente'}</div>
-                          <div className="text-[10px] text-slate-500 uppercase tracking-wide">{cita.status}</div>
+                          <div className="text-sm font-bold text-slate-800 dark:text-white truncate max-w-[140px] sm:max-w-[200px]">{title}</div>
+                          <div className="text-[11px] text-[#51abcd] font-semibold uppercase tracking-wider mt-0.5">{subtitle}</div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <div className="text-xs font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 px-2 py-1 rounded-md">
+                      <div className="flex items-center gap-3 shrink-0">
+                        <div className="text-xs font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 shadow-sm px-3 py-1.5 rounded-lg border border-slate-100 dark:border-slate-600">
                           {hora}
                         </div>
-                        {cita.status !== 'ATENDIDA' && cita.status !== 'CANCELADA' && (
+                        {(isBatch ? cita.status !== 'CERRADO' && cita.status !== 'CANCELADO' : cita.status !== 'ATENDIDA' && cita.status !== 'CANCELADA') && (
                           <button 
-                            onClick={() => updateStatus.mutate({ id: cita.id, status: 'ATENDIDA' })}
-                            className="w-7 h-7 rounded-md bg-emerald-50 dark:bg-emerald-900/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400 flex items-center justify-center transition border border-transparent hover:border-emerald-200 dark:hover:border-emerald-800/50"
-                            title="Marcar como atendida"
+                            onClick={() => {
+                              if (isBatch) {
+                                updateBatchStatus.mutate({ id: cita.id, status: 'CERRADO' });
+                              } else {
+                                updateStatus.mutate({ id: cita.id, status: 'ATENDIDA' });
+                              }
+                            }}
+                            className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 hover:bg-emerald-500 hover:text-white text-emerald-600 flex items-center justify-center transition-all shadow-sm"
+                            title="Marcar como completada"
                           >
-                            <span className="material-symbols-rounded text-[16px] font-bold">check</span>
+                            <span className="material-symbols-rounded text-[18px] font-bold">check</span>
                           </button>
                         )}
                       </div>
                     </div>
                   );
-                })
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center text-center text-slate-400 text-sm p-4">
-                  <div className="w-12 h-12 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center mb-2">
-                    <CalendarCheck size={20} className="text-slate-300" />
-                  </div>
-                  No tienes consultas agendadas para el día de hoy.
-                </div>
-              )}
+                });
+              })()}
             </div>
           </div>
 
-          {/* Consejo del día */}
-          <div className="bg-[#eff6ff] dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/30 rounded-xl p-4 flex items-start gap-4 relative shadow-sm">
-            <div className="w-10 h-10 rounded-full bg-blue-500 text-white flex shrink-0 items-center justify-center shadow-md">
-              <Shield size={20} />
+          {/* Consejo de seguridad */}
+          <div className="bg-white dark:bg-[#1a2332] rounded-3xl p-6 flex items-start gap-5 relative shadow-sm dark:shadow-none border border-slate-200 dark:border-slate-800/60">
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-white/5 text-amber-500 dark:text-amber-400 flex shrink-0 items-center justify-center">
+              <Shield size={24} />
             </div>
             <div className="pr-6">
-              <div className="font-bold text-slate-800 dark:text-blue-400 text-sm mb-1">Consejo del día</div>
-              <div className="text-xs text-slate-600 dark:text-blue-300 leading-relaxed">
-                No olvides revisar tus citas programadas y actualizar la información de tus pacientes.
+              <div className="font-extrabold text-slate-800 dark:text-white text-base mb-1">Consejo de seguridad</div>
+              <div className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
+                Recuerda mantener la confidencialidad de los diagnósticos y bloquear tu sesión al alejarte.
               </div>
             </div>
-            <button className="absolute top-4 right-4 text-blue-400 hover:text-blue-600 transition">
-              <span className="material-symbols-rounded text-[18px]">close</span>
-            </button>
           </div>
         </div>
 
         {/* Columna Derecha: Actividad reciente */}
-        <div className="card rounded-2xl p-6 shadow-sm flex flex-col">
-          <h3 className="text-sm font-bold flex items-center gap-2 text-slate-800 dark:text-slate-200 mb-6 border-b border-slate-50 dark:border-slate-700 pb-4">
-            <TrendingUp size={18} className="text-slate-400" /> Actividad reciente
+        <div className="bg-white dark:bg-slate-800 rounded-3xl p-7 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 dark:border-slate-700 flex flex-col h-full">
+          <h3 className="text-lg font-extrabold flex items-center gap-2 text-slate-800 dark:text-slate-100 mb-6 border-b border-slate-50 dark:border-slate-700 pb-5">
+            <TrendingUp size={20} className="text-[#51abcd]" /> Actividad reciente
           </h3>
-          <div className="flex-1 flex flex-col justify-center space-y-6 py-2">
+          <div className="flex-1 flex flex-col justify-start space-y-6 pt-2">
             
-            {data.activities && data.activities.length > 0 ? data.activities.slice(0, 3).map((act: any, idx: number) => {
+            {data.activities && data.activities.length > 0 ? data.activities.slice(0, 4).map((act: any, idx: number) => {
               const date = new Date(act.date);
               const isPatient = act.type === 'NEW_PATIENT';
               return (
-                <div key={idx} className="flex items-center gap-4">
-                  <div className={`w-10 h-10 rounded-full flex shrink-0 items-center justify-center ${
-                    isPatient ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-500' : 'bg-purple-50 dark:bg-purple-900/20 text-purple-500'
+                <div key={idx} className="flex items-center gap-4 group cursor-default">
+                  <div className={`w-12 h-12 rounded-2xl flex shrink-0 items-center justify-center shadow-sm transition-transform group-hover:scale-105 ${
+                    isPatient ? 'bg-emerald-50 text-emerald-500' : 'bg-[#f0f7ff] text-[#2560aa]'
                   }`}>
-                    {isPatient ? <UserPlus size={18} /> : <CalendarIcon size={18} />}
+                    {isPatient ? <UserPlus size={20} /> : <CalendarIcon size={20} />}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-[13px] font-bold text-slate-800 dark:text-slate-200 truncate">{act.title}</div>
-                    <div className="text-xs text-slate-500 truncate mt-0.5">{act.subtitle}</div>
+                    <div className="text-sm font-bold text-slate-800 dark:text-slate-200 truncate group-hover:text-[#2560aa] transition-colors">{act.title}</div>
+                    <div className="text-xs font-medium text-slate-500 truncate mt-0.5">{act.subtitle}</div>
                   </div>
-                  <div className="text-[10px] text-slate-400 text-right shrink-0 leading-tight capitalize">
-                    {date.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}<br/>
+                  <div className="text-[11px] font-semibold text-slate-400 text-right shrink-0 bg-slate-50 px-2.5 py-1 rounded-lg">
                     {date.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
                   </div>
                 </div>
               );
             }) : (
-              <div className="text-center text-slate-400 text-sm py-4">No hay actividad reciente.</div>
+              <div className="flex-1 flex items-center justify-center text-center text-slate-400 text-sm py-4 font-medium">No hay actividad reciente.</div>
             )}
           </div>
 
           {data.activities && data.activities.length > 0 && (
             <button 
               onClick={() => setShowActivityModal(true)}
-              className="w-full mt-6 py-2.5 text-xs font-semibold text-blue-600 dark:text-blue-400 border border-slate-100 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition flex items-center justify-center gap-1"
+              className="w-full mt-8 py-3.5 text-sm font-bold text-[#2560aa] border-2 border-[#2560aa]/10 rounded-xl hover:bg-[#2560aa] hover:text-white transition-all flex items-center justify-center gap-2"
             >
-              Ver toda la actividad de hoy <ChevronRight size={14} />
+              Ver todo el historial <ChevronRight size={18} />
             </button>
           )}
         </div>
@@ -247,6 +293,26 @@ export default function DoctorDashboard() {
                   </div>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal de Foto de Perfil */}
+      {showPhotoModal && (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4 z-[100] fade-in" onClick={() => setShowPhotoModal(false)}>
+          <div className="relative max-w-sm w-full flex flex-col items-center justify-center" onClick={(e) => e.stopPropagation()}>
+            <button 
+              onClick={() => setShowPhotoModal(false)}
+              className="absolute -top-12 right-0 md:-right-12 text-white/70 hover:text-white transition-colors p-2"
+            >
+              <span className="material-symbols-rounded text-4xl">close</span>
+            </button>
+            <div className="w-64 h-64 sm:w-80 sm:h-80 rounded-full border-4 border-white shadow-2xl overflow-hidden bg-white flex items-center justify-center text-8xl font-extrabold text-[#2560aa] animate-scale-in">
+              {profilePhoto ? (
+                <img src={profilePhoto} alt="Profile Large" className="w-full h-full object-cover" />
+              ) : (
+                user?.fullName?.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || 'U'
+              )}
             </div>
           </div>
         </div>

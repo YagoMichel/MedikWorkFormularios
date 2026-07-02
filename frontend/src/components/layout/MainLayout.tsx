@@ -12,9 +12,10 @@ import { useAuth } from '../../stores/auth';
 import { useTheme } from '../../stores/theme.tsx';
 import logo from '../../assets/logo.png';
 import BottomNav from './BottomNav';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../services/api';
 import { useEffect, useRef, useState } from 'react';
+import { socket } from '../../services/socket';
 
 type NotifItem = {
   id: string;
@@ -31,6 +32,7 @@ export default function MainLayout() {
   const nav = useNavigate();
   const loc = useLocation();
   const { dark, toggle } = useTheme();
+  const qc = useQueryClient();
   const isAdmin = user?.role === 'ADMIN';
   const isDoctor = user?.role === 'DOCTOR';
 
@@ -47,12 +49,37 @@ export default function MainLayout() {
   const notifiedRef = useRef<Set<string>>(new Set());
   const [notifications, setNotifications] = useState<NotifItem[]>([]);
   const [showNotifMenu, setShowNotifMenu] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const unreadCount = notifications.filter(n => n.unread).length;
 
   useEffect(() => {
+    if (user?.id) {
+      const savedPhoto = localStorage.getItem(`profile_photo_${user.id}`);
+      if (savedPhoto) setProfilePhoto(savedPhoto);
+
+      const updatePhoto = () => {
+        const photo = localStorage.getItem(`profile_photo_${user.id}`);
+        if (photo) setProfilePhoto(photo);
+      };
+
+      window.addEventListener('storage', updatePhoto);
+      window.addEventListener('profilePhotoChanged', updatePhoto);
+      return () => {
+        window.removeEventListener('storage', updatePhoto);
+        window.removeEventListener('profilePhotoChanged', updatePhoto);
+      };
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
     const handleClick = (e: MouseEvent) => {
-      if (!(e.target as Element).closest('.notif-container')) {
+      const target = e.target as Element;
+      if (!target.closest('.notif-container')) {
         setShowNotifMenu(false);
+      }
+      if (!target.closest('.profile-container')) {
+        setShowProfileMenu(false);
       }
     };
     document.addEventListener('click', handleClick);
@@ -61,39 +88,91 @@ export default function MainLayout() {
 
   useEffect(() => {
     if (!isDoctor) return;
-    const interval = setInterval(() => {
-      const now = new Date();
-      
-      appts.forEach((a: any) => {
-        if (a.status === 'CANCELADA' || a.status === 'ATENDIDA' || a.status === 'NO_ASISTIO') return;
-        const apptDate = new Date(a.date);
-        const diffMs = apptDate.getTime() - now.getTime();
-        const diffMins = Math.floor(diffMs / 60000);
+    // Las notificaciones de "faltan X minutos" han sido removidas,
+    // ya que la clínica atiende por orden de llegada a partir de las 8 AM.
+  }, [isDoctor]);
 
-        if (diffMins === 15 || diffMins === 5) {
-          const notifId = `${a.id}-${diffMins}`;
-          if (!notifiedRef.current.has(notifId)) {
+  useEffect(() => {
+    if (isAdmin) {
+      const handleBatchCreated = (data: any) => {
+        const notifId = `batch-created-${data.id}`;
+        if (!notifiedRef.current.has(notifId)) {
+          notifiedRef.current.add(notifId);
+          setNotifications(prev => {
+            if (prev.find(n => n.id === notifId)) return prev;
+            return [{
+              id: notifId,
+              title: 'Nueva jornada agendada',
+              subtitle: `${data.company?.name || 'Empresa'} espera confirmación`,
+              timeStr: 'Ahora',
+              unread: true
+            }, ...prev];
+          });
+          qc.invalidateQueries({ queryKey: ['batches'] });
+        }
+      };
+      socket.on('batch:created', handleBatchCreated);
+      return () => { socket.off('batch:created', handleBatchCreated); };
+    }
+    
+    if (isDoctor) {
+      const handleBatchConfirmed = (data: any) => {
+        const notifId = `batch-confirmed-${data.id}`;
+        if (!notifiedRef.current.has(notifId)) {
+          notifiedRef.current.add(notifId);
+          setNotifications(prev => {
+            if (prev.find(n => n.id === notifId)) return prev;
+            return [{
+              id: notifId,
+              title: 'Jornada Confirmada',
+              subtitle: `El admin ha confirmado la jornada de ${data.company}`,
+              timeStr: 'Ahora',
+              unread: true
+            }, ...prev];
+          });
+          qc.invalidateQueries({ queryKey: ['doctor-dashboard'] });
+          qc.invalidateQueries({ queryKey: ['appointments'] });
+        }
+      };
+      socket.on('batch:confirmed', handleBatchConfirmed);
+      return () => { socket.off('batch:confirmed', handleBatchConfirmed); };
+    }
+  }, [isAdmin, isDoctor, qc]);
+
+
+  useEffect(() => {
+    if (!isDoctor) return;
+    const loadMissedNotifs = async () => {
+      try {
+        const { data } = await api.get('/batches', { params: { status: 'CONFIRMADO' } });
+        const readNotifs = JSON.parse(localStorage.getItem(`read_notifs_${user?.id}`) || '[]');
+        
+        data.forEach((b: any) => {
+          const notifId = `batch-confirmed-${b.id}`;
+          if (!readNotifs.includes(notifId) && !notifiedRef.current.has(notifId)) {
             notifiedRef.current.add(notifId);
             setNotifications(prev => {
               if (prev.find(n => n.id === notifId)) return prev;
-              const typeLabel = a.type === 'PRIMERA_VEZ' ? 'Primera vez' : a.type === 'SEGUIMIENTO' ? 'Seguimiento' : 'Consulta general';
-              const newNotif = {
+              return [{
                 id: notifId,
-                title: `Cita en ${diffMins} minutos`,
-                subtitle: `${a.patient?.fullName || 'Paciente'} - ${typeLabel}`,
-                timeStr: `Hoy, ${apptDate.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}`,
+                title: 'Jornada Confirmada',
+                subtitle: `El admin ha confirmado la jornada de ${b.company?.name || 'la empresa'}`,
+                timeStr: new Date(b.updatedAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }),
                 unread: true
-              };
-              return [newNotif, ...prev];
+              }, ...prev];
             });
           }
-        }
-      });
-    }, 10000);
-    return () => clearInterval(interval);
-  }, [appts, isDoctor]);
+        });
+      } catch (err) {}
+    };
+    loadMissedNotifs();
+  }, [isDoctor, user?.id]);
 
   const markAllRead = () => {
+    const ids = notifications.map(n => n.id);
+    const prevRead = JSON.parse(localStorage.getItem(`read_notifs_${user?.id}`) || '[]');
+    localStorage.setItem(`read_notifs_${user?.id}`, JSON.stringify(Array.from(new Set([...prevRead, ...ids]))));
+    
     setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
   };
 
@@ -199,9 +278,9 @@ export default function MainLayout() {
                               <Icon name="event" />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <div className="text-[13px] font-bold text-slate-800 dark:text-white truncate">{n.title}</div>
-                              <div className="text-xs text-slate-500 truncate mt-0.5">{n.subtitle}</div>
-                              <div className="text-[10px] text-slate-400 mt-1">{n.timeStr}</div>
+                              <div className="text-[13px] font-bold text-slate-800 dark:text-white leading-tight">{n.title}</div>
+                              <div className="text-xs text-slate-500 leading-tight mt-1">{n.subtitle}</div>
+                              <div className="text-[10px] text-slate-400 mt-1.5">{n.timeStr}</div>
                             </div>
                             {n.unread && <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0 mt-2"></div>}
                           </div>
@@ -212,13 +291,39 @@ export default function MainLayout() {
                 </div>
               )}
             </div>
-            <div className="layout-user flex items-center gap-2 px-2 py-1 rounded-xl">
-              <div className="w-7 h-7 rounded-full text-white text-[11px] font-bold flex items-center justify-center"
-                style={{ background: 'linear-gradient(135deg, #3375c8, #51abcd)' }}>{initials}</div>
-              <div className="leading-tight hidden sm:block">
-                <div className="layout-username text-xs font-semibold">{user?.fullName}</div>
-                <div className="layout-role text-[10px]">{user?.role}</div>
-              </div>
+            <div className="relative profile-container">
+              <button onClick={() => setShowProfileMenu(!showProfileMenu)} className="layout-user flex items-center gap-2 px-2 py-1.5 rounded-xl transition hover:bg-slate-50 dark:hover:bg-slate-800">
+                <div className="w-8 h-8 rounded-full text-white text-[11px] font-bold flex items-center justify-center shadow-sm overflow-hidden"
+                  style={{ background: 'linear-gradient(135deg, #2560aa, #51abcd)' }}>
+                  {profilePhoto ? (
+                    <img src={profilePhoto} alt="User" className="w-full h-full object-cover" />
+                  ) : (
+                    initials
+                  )}
+                </div>
+                <div className="leading-tight hidden sm:block text-left">
+                  <div className="layout-username text-xs font-bold text-slate-800 dark:text-slate-100">{user?.fullName}</div>
+                  <div className="layout-role text-[10px] font-semibold text-slate-500 dark:text-slate-400">{user?.role}</div>
+                </div>
+                <span className="material-symbols-rounded text-slate-400 text-[20px] transition-transform ml-1" style={{ transform: showProfileMenu ? 'rotate(180deg)' : 'none' }}>expand_more</span>
+              </button>
+
+              {showProfileMenu && (
+                <div className="absolute top-full right-0 mt-3 w-52 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-700 z-50 transform origin-top-right transition-all fade-in">
+                  <div className="absolute -top-1.5 right-[20px] w-3 h-3 bg-white dark:bg-slate-800 border-l border-t border-slate-100 dark:border-slate-700 rotate-45"></div>
+                  
+                  <div className="relative z-10 bg-white dark:bg-slate-800 rounded-2xl overflow-hidden py-2">
+                    <button onClick={() => { nav('/profile'); setShowProfileMenu(false); }} className="w-full px-5 py-3 text-left text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center gap-3 transition">
+                      <span className="material-symbols-rounded text-lg text-slate-400">person</span> Mi Perfil
+                    </button>
+
+                    <div className="my-1 border-t border-slate-100 dark:border-slate-700"></div>
+                    <button onClick={() => { logout(); nav('/login'); }} className="w-full px-5 py-3 text-left text-sm font-extrabold text-red-600 hover:bg-red-50 dark:hover:bg-red-900/10 flex items-center gap-3 transition">
+                      <span className="material-symbols-rounded text-lg text-red-500">logout</span> Cerrar sesión
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </header>

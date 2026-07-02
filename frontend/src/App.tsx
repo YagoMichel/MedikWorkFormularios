@@ -46,6 +46,7 @@ import TabletHome from './pages/tablet/Home';
 // -- Paginas compartidas DOCTOR + ADMIN --
 import Patients      from './pages/common/Patients';
 import PatientDetail from './pages/common/PatientDetail';
+import Profile       from './pages/common/Profile';
 
 export default function App() {
   const { user } = useAuth();
@@ -76,6 +77,7 @@ export default function App() {
           <Route path="/calendario"  element={<AdminCalendarView />} />
           <Route path="/reportes"    element={<AdminReports />} />
           {/* Compartidas con doctor */}
+          <Route path="/profile"     element={<Profile />} />
           <Route path="/patients"    element={<Patients />} />
           <Route path="/patients/:id" element={<PatientDetail />} />
           <Route path="/appointments" element={<DoctorCalendar />} />
@@ -106,6 +108,7 @@ export default function App() {
         <Route path="/appointments"  element={<DoctorCalendar />} />
         <Route path="/prescriptions" element={<DoctorPrescriptions />} />
         {/* Compartidas con admin */}
+        <Route path="/profile"       element={<Profile />} />
         <Route path="/patients"      element={<Patients />} />
         <Route path="/patients/:id"  element={<PatientDetail />} />
         <Route path="*"              element={<Navigate to="/" replace />} />
