@@ -194,8 +194,9 @@ router.get('/doctor', requireRole('DOCTOR', 'ADMIN'), async (req: AuthRequest, r
   const doctorId = req.user!.id;
 
   const monthStart = startOfMonth();
-  const [todays, tomorrows, lastRx, stats, citasMes, totalPacientes, proximaCita, recentPatients, recentAppointments] = await Promise.all([
+  const [todays, todaysBatches, tomorrows, lastRx, stats, citasMes, totalPacientes, proximaCita, recentPatients, recentAppointments, recentBatches] = await Promise.all([
     prisma.appointment.findMany({ where: { doctorId, date: { gte: today, lt: tomorrow }, source: 'MANUAL' }, include: { patient: true }, orderBy: { date: 'asc' } }),
+    prisma.companyBatch.findMany({ where: { date: { gte: today, lt: tomorrow }, status: { not: 'CANCELADO' } }, include: { company: true }, orderBy: { date: 'asc' } }),
     prisma.appointment.findMany({ where: { doctorId, date: { gte: tomorrow, lt: dayAfter }, source: 'MANUAL' }, include: { patient: true }, orderBy: { date: 'asc' }, take: 3 }),
     prisma.prescription.findMany({ where: { doctorId }, include: { patient: true }, orderBy: { issuedAt: 'desc' }, take: 5 }),
     prisma.appointment.groupBy({ by: ['status'], where: { doctorId, date: { gte: today, lt: tomorrow }, source: 'MANUAL' }, _count: true }),
@@ -206,26 +207,42 @@ router.get('/doctor', requireRole('DOCTOR', 'ADMIN'), async (req: AuthRequest, r
     prisma.patient.count(),
     prisma.appointment.findFirst({ where: { doctorId, date: { gte: new Date() }, status: { notIn: ['CANCELADA', 'NO_ASISTIO'] } }, orderBy: { date: 'asc' }, include: { patient: true, batch: { include: { company: true } } } }),
     prisma.patient.findMany({ where: { createdAt: { gte: today, lt: tomorrow } }, orderBy: { createdAt: 'desc' }, take: 50 }),
-    prisma.appointment.findMany({ where: { doctorId, createdAt: { gte: today, lt: tomorrow } }, include: { patient: true }, orderBy: { createdAt: 'desc' }, take: 50 }),
+    prisma.appointment.findMany({ where: { doctorId, createdAt: { gte: today, lt: tomorrow }, batchId: null }, include: { patient: true }, orderBy: { createdAt: 'desc' }, take: 50 }),
+    prisma.companyBatch.findMany({ where: { createdAt: { gte: today, lt: tomorrow } }, include: { company: true }, orderBy: { createdAt: 'desc' }, take: 10 }),
   ]);
 
   const counts = { AGENDADA: 0, CONFIRMADA: 0, EN_CONSULTA: 0, ATENDIDA: 0, CANCELADA: 0, NO_ASISTIO: 0 };
   stats.forEach((s) => { (counts as any)[s.status] = s._count; });
 
   const activities = [
-    ...recentPatients.map(p => ({ type: 'NEW_PATIENT', date: p.createdAt, title: 'Nuevo paciente registrado', subtitle: p.fullName })),
-    ...recentAppointments.map(a => ({ type: 'NEW_APPOINTMENT', date: a.createdAt, title: 'Cita agendada', subtitle: a.patient?.fullName || 'Paciente empresarial' })),
+    ...recentPatients.map((p: any) => ({ type: 'NEW_PATIENT', date: p.createdAt, title: 'Nuevo paciente registrado', subtitle: p.fullName })),
+    ...recentAppointments.map((a: any) => {
+      let subtitle = a.patient?.fullName;
+      if (!subtitle) {
+          if (a.batch?.company?.name === 'Sin Empresa') subtitle = 'Cita individual (Sin paciente)';
+          else if (a.batch?.company?.name) subtitle = `Paciente de ${a.batch.company.name}`;
+          else subtitle = 'Paciente empresarial';
+      }
+      return { type: 'NEW_APPOINTMENT', date: a.createdAt, title: 'Cita agendada', subtitle };
+    }),
+    ...recentBatches.map((b: any) => ({
+      type: 'NEW_BATCH',
+      date: b.createdAt,
+      title: 'Jornada agendada',
+      subtitle: b.company?.name === 'Sin Empresa' ? 'Jornada individual' : `Empresa: ${b.company?.name}`
+    }))
   ].sort((a, b) => b.date.getTime() - a.date.getTime());
 
   res.json({
     todays,
+    todaysBatches,
     tomorrows,
     lastPrescriptions: lastRx,
     stats: {
-      total: todays.length,
-      atendidas: counts.ATENDIDA,
-      pendientes: counts.AGENDADA + counts.CONFIRMADA + counts.EN_CONSULTA,
-      canceladas: counts.CANCELADA + counts.NO_ASISTIO,
+      total: todays.length + todaysBatches.length,
+      atendidas: counts.ATENDIDA + todaysBatches.filter((b: any) => b.status === 'CERRADO').length,
+      pendientes: counts.AGENDADA + counts.CONFIRMADA + counts.EN_CONSULTA + todaysBatches.filter((b: any) => b.status !== 'CERRADO' && b.status !== 'CANCELADO').length,
+      canceladas: counts.CANCELADA + counts.NO_ASISTIO + todaysBatches.filter((b: any) => b.status === 'CANCELADO').length,
     },
     citasMes,
     totalPacientes,

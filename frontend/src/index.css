@@ -168,6 +168,28 @@ body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg-main); 
 .tab-btn { padding: 8px 16px; border-radius: 12px; background: var(--bg-card); border: 1px solid transparent; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .2s; color: var(--text-secondary); }
 .tab-btn.active { background: var(--primary-500); color: #fff; box-shadow: 0 4px 12px rgba(22,105,124,0.15); }
 
+/* Scrollbar personalizado */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
 /* ── Bottom Nav (mobile) ─────────────────────────────────────── */
 .bottom-nav-bar {
   background: #1e293b;
