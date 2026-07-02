@@ -11,6 +11,8 @@
     "prisma:push": "prisma db push",
     "seed": "tsx prisma/seed.ts",
     "seed:frames": "tsx prisma/seed-frames.ts",
+    "seed:catalogo-pos": "tsx src/scripts/sync-lista-precios.ts",
+    "seed:servicios": "tsx prisma/seed-servicios.ts",
     "seed:sepomex": "tsx scripts/download-sepomex.ts",
     "agent:token": "tsx src/scripts/create-agent-token.ts"
   },
