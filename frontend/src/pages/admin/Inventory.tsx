@@ -17,6 +17,7 @@ export default function Inventory() {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [q, setQ] = useState('');
+  const [catFilter, setCatFilter] = useState<string>('');
   type ColDef = { name: string; type: 'text' | 'number' };
   const [extraCols, setExtraCols] = useState<ColDef[]>(() => {
     try { return JSON.parse(localStorage.getItem('inv-cols') || '[]'); } catch { return []; }
@@ -32,8 +33,25 @@ export default function Inventory() {
     localStorage.setItem('inv-cols', JSON.stringify(cols));
   };
 
-  const { data: products = [] } = useQuery({ queryKey: ['products', q], queryFn: async () => (await api.get('/inventory/products', { params: { q } })).data });
+  const { data: products = [] } = useQuery({
+    queryKey: ['products', q, catFilter],
+    queryFn: async () => (await api.get('/inventory/products', { params: { q, categoryId: catFilter || undefined } })).data,
+  });
   const { data: categories = [] } = useQuery({ queryKey: ['categories'], queryFn: async () => (await api.get('/inventory/categories')).data });
+
+  // Ventas del mes actual para calcular "vendido este mes" por producto
+  const mesInicio = new Date(); mesInicio.setDate(1); mesInicio.setHours(0,0,0,0);
+  const { data: salesMonth = [] } = useQuery({
+    queryKey: ['sales-month'],
+    queryFn: async () => (await api.get('/sales', { params: { from: mesInicio.toISOString(), status: undefined } })).data,
+  });
+  const soldThisMonth: Record<string, number> = {};
+  for (const sale of salesMonth as any[]) {
+    if (sale.status === 'CANCELADA') continue;
+    for (const item of sale.items || []) {
+      soldThisMonth[item.productId] = (soldThisMonth[item.productId] || 0) + item.quantity;
+    }
+  }
 
   const save = useMutation({
     mutationFn: async (d: any) => editing ? (await api.put(`/inventory/products/${editing.id}`, d)).data : (await api.post('/inventory/products', d)).data,
@@ -51,6 +69,38 @@ export default function Inventory() {
         <button onClick={() => { setEditing(null); setOpen(true); }} className="btn btn-primary"><Icon name="add" /> Nuevo producto</button>
       </div>
       <div className="card">
+        {/* Filtros por categoría */}
+        <div className="flex flex-wrap gap-2 mb-3">
+          <button
+            onClick={() => setCatFilter('')}
+            className="tab-btn"
+            style={{
+              padding: '6px 14px', fontSize: 13, fontWeight: 600, borderRadius: 8,
+              background: catFilter === '' ? '#2563eb' : '#f1f5f9',
+              color: catFilter === '' ? '#fff' : '#475569',
+              border: 'none', cursor: 'pointer', transition: 'all 0.15s',
+            }}
+          >
+            Todas <span style={{ opacity: 0.7, marginLeft: 4 }}>({products.length})</span>
+          </button>
+          {(categories as any[]).map((c: any) => {
+            const active = catFilter === c.id;
+            return (
+              <button
+                key={c.id}
+                onClick={() => setCatFilter(c.id)}
+                style={{
+                  padding: '6px 14px', fontSize: 13, fontWeight: 600, borderRadius: 8,
+                  background: active ? '#2563eb' : '#f1f5f9',
+                  color: active ? '#fff' : '#475569',
+                  border: 'none', cursor: 'pointer', transition: 'all 0.15s',
+                }}
+              >
+                {c.name}
+              </button>
+            );
+          })}
+        </div>
         <div className="relative max-w-xs mb-3">
           <input className="input" placeholder="Buscar..." value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
@@ -58,7 +108,7 @@ export default function Inventory() {
           <table className="tbl">
             <thead>
               <tr>
-                <th>Nombre</th><th>Categoría</th><th className="text-right">Stock</th><th className="text-right">Costo</th><th className="text-right">Venta</th>
+                <th>Nombre</th><th>Categoría</th><th className="text-right">Stock</th><th className="text-right">Vendido mes</th><th className="text-right">Costo</th><th className="text-right">Venta</th>
                 {extraCols.map((col, i) => (
                   <th key={i} className="text-center min-w-[120px]">
                     {editingCol === i ? (
@@ -118,7 +168,12 @@ export default function Inventory() {
                   <td className="font-semibold">{p.name}</td>
                   <td><span className="badge badge-slate">{p.category?.name}</span></td>
                   <td className="text-right">
-                    <span className={`badge ${p.stock <= p.minStock ? 'badge-red' : 'badge-green'}`}>{p.stock}/{p.minStock}</span>
+                    <span className={`badge ${p.stock <= 0 ? 'badge-red' : p.stock <= p.minStock ? 'badge-yellow' : 'badge-green'}`}>{p.stock}/{p.minStock}</span>
+                  </td>
+                  <td className="text-right">
+                    {soldThisMonth[p.id]
+                      ? <span className="badge badge-blue">{soldThisMonth[p.id]}</span>
+                      : <span className="text-slate-300">—</span>}
                   </td>
                   <td className="text-right">${p.costPrice}</td>
                   <td className="text-right font-semibold">${p.salePrice}</td>
