@@ -1,5 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import multer from 'multer';
+import fs from 'fs';
+import path from 'path';
 import { prisma } from '../prisma';
 import { authRequired, requireRole, AuthRequest } from '../middleware/auth';
 import { emit } from '../socket';
@@ -78,6 +81,37 @@ router.delete('/products/:id', requireRole('ADMIN'), async (req, res) => {
   await prisma.product.update({ where: { id: req.params.id }, data: { active: false } });
   emit('product:deleted', { id: req.params.id });
   res.json({ ok: true });
+});
+
+// Foto de producto — se guarda en disco (mismo patron que auth.ts /me/photo)
+const UPLOAD_DIR = process.env.UPLOAD_DIR || '/app/uploads';
+const PRODUCTS_DIR = path.join(UPLOAD_DIR, 'products');
+if (!fs.existsSync(PRODUCTS_DIR)) fs.mkdirSync(PRODUCTS_DIR, { recursive: true });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+
+router.post('/products/:id/photo', requireRole('ADMIN'), upload.single('photo'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Imagen requerida' });
+  if (!req.file.mimetype.startsWith('image/')) return res.status(400).json({ error: 'El archivo debe ser una imagen' });
+
+  const product = await prisma.product.findUnique({ where: { id: req.params.id } });
+  if (!product) return res.status(404).json({ error: 'Producto no encontrado' });
+
+  const ext = path.extname(req.file.originalname) || '.jpg';
+  const filename = `${product.id}_${Date.now()}${ext}`;
+  fs.writeFileSync(path.join(PRODUCTS_DIR, filename), req.file.buffer);
+
+  if (product.imageUrl) {
+    const prevPath = path.join(UPLOAD_DIR, product.imageUrl.replace(/^\/uploads\//, ''));
+    if (fs.existsSync(prevPath)) fs.unlinkSync(prevPath);
+  }
+
+  const imageUrl = `/uploads/products/${filename}`;
+  const updated = await prisma.product.update({
+    where: { id: product.id },
+    data: { imageUrl },
+  });
+  emit('product:updated', updated);
+  res.json(updated);
 });
 
 export default router;

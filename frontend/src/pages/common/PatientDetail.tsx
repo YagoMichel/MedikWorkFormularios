@@ -40,6 +40,27 @@ export default function PatientDetail() {
     <div className="space-y-4">
       <Link to="/patients" className="text-sm text-slate-500 flex items-center gap-1"><ArrowLeft size={14} /> Volver</Link>
 
+      <div className="card flex items-center gap-4">
+        {p.photoUrl ? (
+          <img src={p.photoUrl} alt={p.fullName}
+            className="w-20 h-20 rounded-2xl object-cover border-2 shrink-0"
+            style={{ borderColor: '#3375c8', background: '#fff' }} />
+        ) : (
+          <div className="w-20 h-20 rounded-2xl flex items-center justify-center shrink-0 text-2xl font-bold text-white"
+            style={{ background: '#3375c8' }}>
+            {p.fullName?.charAt(0)?.toUpperCase() ?? '?'}
+          </div>
+        )}
+        <div className="min-w-0">
+          <h2 className="text-lg font-bold truncate">{p.fullName}</h2>
+          <div className="text-sm text-slate-500 flex flex-wrap gap-x-3 gap-y-0.5">
+            {p.company && <span>{p.company}</span>}
+            {p.phone && <span>{p.phone}</span>}
+            {p.nss && <span>NSS: {p.nss}</span>}
+          </div>
+        </div>
+      </div>
+
       <div className="flex gap-2 border-b border-slate-200">
         {tabs.map((t) => (
           <button key={t.k} onClick={() => setTab(t.k)} className={`px-4 py-2 text-sm font-medium border-b-2 ${tab === t.k ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`}>

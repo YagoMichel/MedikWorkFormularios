@@ -50,27 +50,7 @@ export default function MainLayout() {
   const [notifications, setNotifications] = useState<NotifItem[]>([]);
   const [showNotifMenu, setShowNotifMenu] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const unreadCount = notifications.filter(n => n.unread).length;
-
-  useEffect(() => {
-    if (user?.id) {
-      const savedPhoto = localStorage.getItem(`profile_photo_${user.id}`);
-      if (savedPhoto) setProfilePhoto(savedPhoto);
-
-      const updatePhoto = () => {
-        const photo = localStorage.getItem(`profile_photo_${user.id}`);
-        if (photo) setProfilePhoto(photo);
-      };
-
-      window.addEventListener('storage', updatePhoto);
-      window.addEventListener('profilePhotoChanged', updatePhoto);
-      return () => {
-        window.removeEventListener('storage', updatePhoto);
-        window.removeEventListener('profilePhotoChanged', updatePhoto);
-      };
-    }
-  }, [user?.id]);
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -111,8 +91,35 @@ export default function MainLayout() {
           qc.invalidateQueries({ queryKey: ['batches'] });
         }
       };
+
+      const handleAppointmentCreated = (data: any) => {
+        // Solo avisar al admin de citas que estén pendientes de confirmar
+        if (data.status !== 'AGENDADA') return;
+
+        const notifId = `admin-appt-created-${data.id}`;
+        if (!notifiedRef.current.has(notifId)) {
+          notifiedRef.current.add(notifId);
+          setNotifications(prev => {
+            if (prev.find(n => n.id === notifId)) return prev;
+            return [{
+              id: notifId,
+              title: 'Nueva Cita por Confirmar',
+              subtitle: `Doctor agendó a ${data.patient?.fullName || 'Nuevo paciente'}`,
+              timeStr: 'Ahora',
+              unread: true
+            }, ...prev];
+          });
+          qc.invalidateQueries({ queryKey: ['appointments'] });
+        }
+      };
+
       socket.on('batch:created', handleBatchCreated);
-      return () => { socket.off('batch:created', handleBatchCreated); };
+      socket.on('appointment:created', handleAppointmentCreated);
+      
+      return () => { 
+        socket.off('batch:created', handleBatchCreated); 
+        socket.off('appointment:created', handleAppointmentCreated);
+      };
     }
     
     if (isDoctor) {
@@ -134,8 +141,37 @@ export default function MainLayout() {
           qc.invalidateQueries({ queryKey: ['appointments'] });
         }
       };
+
+      const handleAppointmentCreated = (data: any) => {
+        // Verificar que la cita sea para este doctor
+        if (data.doctorId !== user?.id) return;
+        
+        const notifId = `appt-created-${data.id}`;
+        if (!notifiedRef.current.has(notifId)) {
+          notifiedRef.current.add(notifId);
+          setNotifications(prev => {
+            if (prev.find(n => n.id === notifId)) return prev;
+            return [{
+              id: notifId,
+              title: 'Nueva Cita Agendada',
+              subtitle: `Paciente: ${data.patient?.fullName || 'Nuevo'}. ${new Date(data.date).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}`,
+              timeStr: 'Ahora',
+              unread: true
+            }, ...prev];
+          });
+          qc.invalidateQueries({ queryKey: ['doctor-dashboard'] });
+          qc.invalidateQueries({ queryKey: ['doctor-appointments-today'] });
+          qc.invalidateQueries({ queryKey: ['appointments'] });
+        }
+      };
+
       socket.on('batch:confirmed', handleBatchConfirmed);
-      return () => { socket.off('batch:confirmed', handleBatchConfirmed); };
+      socket.on('appointment:created', handleAppointmentCreated);
+      
+      return () => { 
+        socket.off('batch:confirmed', handleBatchConfirmed); 
+        socket.off('appointment:created', handleAppointmentCreated);
+      };
     }
   }, [isAdmin, isDoctor, qc]);
 
@@ -144,29 +180,111 @@ export default function MainLayout() {
     if (!isDoctor) return;
     const loadMissedNotifs = async () => {
       try {
-        const { data } = await api.get('/batches', { params: { status: 'CONFIRMADO' } });
+        const { data: batches } = await api.get('/batches', { params: { status: 'CONFIRMADO' } });
+        const today = new Date(); today.setHours(0,0,0,0);
+        const tmrw = new Date(today.getTime() + 86400000 * 7); // Ver citas de los próximos 7 días
+        const { data: appts } = await api.get('/appointments', { params: { from: today.toISOString(), to: tmrw.toISOString(), mine: true } });
+        
         const readNotifs = JSON.parse(localStorage.getItem(`read_notifs_${user?.id}`) || '[]');
         
-        data.forEach((b: any) => {
+        const newNotifs: NotifItem[] = [];
+
+        batches.forEach((b: any) => {
           const notifId = `batch-confirmed-${b.id}`;
           if (!readNotifs.includes(notifId) && !notifiedRef.current.has(notifId)) {
             notifiedRef.current.add(notifId);
-            setNotifications(prev => {
-              if (prev.find(n => n.id === notifId)) return prev;
-              return [{
-                id: notifId,
-                title: 'Jornada Confirmada',
-                subtitle: `El admin ha confirmado la jornada de ${b.company?.name || 'la empresa'}`,
-                timeStr: new Date(b.updatedAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }),
-                unread: true
-              }, ...prev];
+            newNotifs.push({
+              id: notifId,
+              title: 'Jornada Confirmada',
+              subtitle: `El admin ha confirmado la jornada de ${b.company?.name || 'la empresa'}`,
+              timeStr: new Date(b.updatedAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }),
+              unread: true
             });
           }
         });
+
+        appts.forEach((a: any) => {
+          // No notificar para citas de empresa (ya tienen su propia notificación de Jornada)
+          if (a.batchId) return;
+          
+          const notifId = `appt-created-${a.id}`;
+          if (!readNotifs.includes(notifId) && !notifiedRef.current.has(notifId)) {
+            notifiedRef.current.add(notifId);
+            newNotifs.push({
+              id: notifId,
+              title: 'Nueva Cita Agendada',
+              subtitle: `Paciente: ${a.patient?.fullName || 'Nuevo'}. ${new Date(a.date).toLocaleDateString('es-MX')} ${new Date(a.date).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}`,
+              timeStr: new Date(a.createdAt || a.date).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }),
+              unread: true
+            });
+          }
+        });
+
+        if (newNotifs.length > 0) {
+          setNotifications(prev => {
+            const filteredPrev = prev.filter(p => !newNotifs.find(n => n.id === p.id));
+            return [...newNotifs, ...filteredPrev];
+          });
+        }
+
       } catch (err) {}
     };
     loadMissedNotifs();
   }, [isDoctor, user?.id]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const loadAdminMissedNotifs = async () => {
+      try {
+        const { data: batches } = await api.get('/batches', { params: { status: 'BORRADOR' } });
+        const today = new Date(); today.setHours(0,0,0,0);
+        const tmrw = new Date(today.getTime() + 86400000 * 7); // Ver citas de los próximos 7 días
+        const { data: appts } = await api.get('/appointments', { params: { from: today.toISOString(), to: tmrw.toISOString() } });
+        
+        const readNotifs = JSON.parse(localStorage.getItem(`read_notifs_${user?.id}`) || '[]');
+        const newNotifs: NotifItem[] = [];
+
+        batches.forEach((b: any) => {
+          const notifId = `batch-created-${b.id}`;
+          if (!readNotifs.includes(notifId) && !notifiedRef.current.has(notifId)) {
+            notifiedRef.current.add(notifId);
+            newNotifs.push({
+              id: notifId,
+              title: 'Nueva jornada agendada',
+              subtitle: `${b.company?.name || 'Empresa'} espera confirmación`,
+              timeStr: new Date(b.createdAt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }),
+              unread: true
+            });
+          }
+        });
+
+        appts.forEach((a: any) => {
+          // Solo notificar al admin si la cita está 'AGENDADA' (pendiente de confirmación) y no es de empresa
+          if (a.batchId || a.status !== 'AGENDADA') return;
+          
+          const notifId = `admin-appt-created-${a.id}`;
+          if (!readNotifs.includes(notifId) && !notifiedRef.current.has(notifId)) {
+            notifiedRef.current.add(notifId);
+            newNotifs.push({
+              id: notifId,
+              title: 'Nueva Cita por Confirmar',
+              subtitle: `Paciente: ${a.patient?.fullName || 'Nuevo'}. ${new Date(a.date).toLocaleDateString('es-MX')}`,
+              timeStr: new Date(a.createdAt || a.date).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }),
+              unread: true
+            });
+          }
+        });
+
+        if (newNotifs.length > 0) {
+          setNotifications(prev => {
+            const filteredPrev = prev.filter(p => !newNotifs.find(n => n.id === p.id));
+            return [...newNotifs, ...filteredPrev];
+          });
+        }
+      } catch (err) {}
+    };
+    loadAdminMissedNotifs();
+  }, [isAdmin, user?.id]);
 
   const markAllRead = () => {
     const ids = notifications.map(n => n.id);
@@ -196,7 +314,7 @@ export default function MainLayout() {
     '/': 'Dashboard', '/patients': 'Pacientes', '/sales': 'Ventas', '/pos': 'Punto de venta',
     '/appointments': 'Agenda', '/inventory': 'Inventario',
     '/movements': 'Movimientos', '/users': 'Usuarios', '/prescriptions': 'Recetas',
-    '/citas': 'Citas', '/calendario': 'Calendario', '/reportes': 'Reportes',
+    '/citas': 'Citas', '/calendario': 'Calendario', '/reportes': 'Reportes', '/companies': 'Empresas'
   };
   const title = titleMap[loc.pathname] || (loc.pathname.startsWith('/patients/') ? 'Ficha de paciente' : 'Mediwork');
 
@@ -297,8 +415,8 @@ export default function MainLayout() {
               <button onClick={() => setShowProfileMenu(!showProfileMenu)} className="layout-user flex items-center gap-2 px-2 py-1.5 rounded-xl transition hover:bg-slate-50 dark:hover:bg-slate-800">
                 <div className="w-8 h-8 rounded-full text-white text-[11px] font-bold flex items-center justify-center shadow-sm overflow-hidden"
                   style={{ background: 'linear-gradient(135deg, #2560aa, #51abcd)' }}>
-                  {profilePhoto ? (
-                    <img src={profilePhoto} alt="User" className="w-full h-full object-cover" />
+                  {user?.photoUrl ? (
+                    <img src={`${user.photoUrl}?t=${Date.now()}`} alt="User" className="w-full h-full object-cover" />
                   ) : (
                     initials
                   )}

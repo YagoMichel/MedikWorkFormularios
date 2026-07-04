@@ -14,13 +14,14 @@
 
 import { create } from 'zustand';
 
-export type Role = 'ADMIN' | 'DOCTOR' | 'PACIENTE';
+export type Role = 'ADMIN' | 'DOCTOR' | 'PACIENTE' | 'AGENT';
 
 export interface User {
   id: string;
   email: string;
   fullName: string;
   role: Role;
+  photoUrl?: string | null;
 }
 
 interface AuthStore {

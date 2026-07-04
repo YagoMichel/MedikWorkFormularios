@@ -14,7 +14,7 @@ router.get('/admin', requireRole('ADMIN'), async (_req, res) => {
   const monthStart = startOfMonth();
   const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
 
-  const [salesToday, salesYesterday, salesMonth, salesLastMonth, patientsToday, patientsYesterday, lowStock, last30, top5, lastSales, todaysAppointments, lowStockList, empresasCount, pendingBatches] = await Promise.all([
+  const [salesToday, salesYesterday, salesMonth, salesLastMonth, patientsToday, patientsYesterday, lowStock, last30, top5, lastSales, todaysAppointments, lowStockList, empresasCount, pendingBatches, todaysBatches] = await Promise.all([
     prisma.sale.aggregate({ _sum: { total: true }, _count: true, where: { createdAt: { gte: today }, status: { not: 'CANCELADA' } } }),
     prisma.sale.aggregate({ _sum: { total: true }, _count: true, where: { createdAt: { gte: yesterday, lt: today }, status: { not: 'CANCELADA' } } }),
     prisma.sale.aggregate({ _sum: { total: true }, _count: true, where: { createdAt: { gte: monthStart }, status: { not: 'CANCELADA' } } }),
@@ -38,6 +38,7 @@ router.get('/admin', requireRole('ADMIN'), async (_req, res) => {
     prisma.product.findMany({ where: { active: true }, orderBy: { stock: 'asc' }, take: 20 }),
     prisma.company.count(),
     prisma.companyBatch.count({ where: { status: 'BORRADOR' } }),
+    prisma.companyBatch.findMany({ where: { date: { gte: today, lt: new Date(today.getTime() + 86400000) }, status: { not: 'CANCELADO' } }, include: { company: true }, orderBy: { date: 'asc' } }),
   ]);
 
   // Stock crítico
@@ -79,6 +80,7 @@ router.get('/admin', requireRole('ADMIN'), async (_req, res) => {
     top5: top5Full,
     lastSales,
     todaysAppointments,
+    todaysBatches,
     lowStockProducts,
   });
 });
@@ -195,13 +197,13 @@ router.get('/doctor', requireRole('DOCTOR', 'ADMIN'), async (req: AuthRequest, r
 
   const monthStart = startOfMonth();
   const [todays, todaysBatches, tomorrows, lastRx, stats, citasMes, totalPacientes, proximaCita, recentPatients, recentAppointments, recentBatches] = await Promise.all([
-    prisma.appointment.findMany({ where: { doctorId, date: { gte: today, lt: tomorrow }, source: 'MANUAL' }, include: { patient: true }, orderBy: { date: 'asc' } }),
+    prisma.appointment.findMany({ where: { doctorId, date: { gte: today, lt: tomorrow }, batchId: null }, include: { patient: true }, orderBy: { date: 'asc' } }),
     prisma.companyBatch.findMany({ where: { date: { gte: today, lt: tomorrow }, status: { not: 'CANCELADO' } }, include: { company: true }, orderBy: { date: 'asc' } }),
-    prisma.appointment.findMany({ where: { doctorId, date: { gte: tomorrow, lt: dayAfter }, source: 'MANUAL' }, include: { patient: true }, orderBy: { date: 'asc' }, take: 3 }),
+    prisma.appointment.findMany({ where: { doctorId, date: { gte: tomorrow, lt: dayAfter }, batchId: null }, include: { patient: true }, orderBy: { date: 'asc' }, take: 3 }),
     prisma.prescription.findMany({ where: { doctorId }, include: { patient: true }, orderBy: { issuedAt: 'desc' }, take: 5 }),
-    prisma.appointment.groupBy({ by: ['status'], where: { doctorId, date: { gte: today, lt: tomorrow }, source: 'MANUAL' }, _count: true }),
+    prisma.appointment.groupBy({ by: ['status'], where: { doctorId, date: { gte: today, lt: tomorrow }, batchId: null }, _count: true }),
     Promise.all([
-      prisma.appointment.count({ where: { doctorId, date: { gte: monthStart }, status: { not: 'CANCELADA' }, source: 'MANUAL' } }),
+      prisma.appointment.count({ where: { doctorId, date: { gte: monthStart }, status: { not: 'CANCELADA' }, batchId: null } }),
       prisma.companyBatch.count({ where: { date: { gte: monthStart }, status: { not: 'CANCELADO' }, appointments: { some: { doctorId } } } }),
     ]).then(([manual, batches]) => manual + batches),
     prisma.patient.count(),

@@ -4,7 +4,8 @@
 // =============================================================
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../stores/auth';
-import { Mail, User, Key, ShieldCheck, Camera, Save, X, Lock, CheckCircle2 } from 'lucide-react';
+import { api } from '../../services/api';
+import { Mail, User, Key, Camera, Save, X, Lock, Pencil, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function Profile() {
@@ -18,17 +19,12 @@ export default function Profile() {
   }, []);
 
   // Profile picture
-  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Load photo from local storage if exists
-  useEffect(() => {
-    const savedPhoto = localStorage.getItem(`profile_photo_${user?.id}`);
-    if (savedPhoto) setProfilePhoto(savedPhoto);
-  }, [user?.id]);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
 
   // Edit Personal Info
   const [isEditingInfo, setIsEditingInfo] = useState(false);
+  const [isSavingInfo, setIsSavingInfo] = useState(false);
   const [formData, setFormData] = useState({
     fullName: user?.fullName || '',
     email: user?.email || '',
@@ -36,42 +32,63 @@ export default function Profile() {
 
   // Change Password
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [isSavingPassword, setIsSavingPassword] = useState(false);
   const [passwords, setPasswords] = useState({
     current: '',
     newPass: '',
     confirm: ''
   });
 
-  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64String = reader.result as string;
-        setProfilePhoto(base64String);
-        localStorage.setItem(`profile_photo_${user?.id}`, base64String);
-        window.dispatchEvent(new Event('profilePhotoChanged'));
-        toast.success('Foto de perfil actualizada correctamente');
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('El archivo debe ser una imagen');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('La imagen no debe superar 5MB');
+      return;
+    }
+
+    setIsUploadingPhoto(true);
+    try {
+      const body = new FormData();
+      body.append('photo', file);
+      const { data } = await api.post('/auth/me/photo', body);
+      if (token) setAuth(token, data);
+      toast.success('Foto de perfil actualizada correctamente');
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'No se pudo subir la foto');
+    } finally {
+      setIsUploadingPhoto(false);
+      e.target.value = '';
     }
   };
 
-  const handleSaveInfo = () => {
+  const handleSaveInfo = async () => {
     if (!formData.fullName.trim() || !formData.email.trim()) {
       toast.error('Todos los campos son obligatorios');
       return;
     }
 
-    // Simulate API Call and update local store
-    if (user && token) {
-      setAuth(token, { ...user, fullName: formData.fullName, email: formData.email });
+    setIsSavingInfo(true);
+    try {
+      const { data } = await api.put('/auth/me', {
+        fullName: formData.fullName.trim(),
+        email: formData.email.trim(),
+      });
+      if (token) setAuth(token, data);
       setIsEditingInfo(false);
       toast.success('Información actualizada con éxito');
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'No se pudo actualizar la información');
+    } finally {
+      setIsSavingInfo(false);
     }
   };
 
-  const handleSavePassword = () => {
+  const handleSavePassword = async () => {
     if (!passwords.current || !passwords.newPass || !passwords.confirm) {
       toast.error('Completa todos los campos de contraseña');
       return;
@@ -80,17 +97,25 @@ export default function Profile() {
       toast.error('Las contraseñas nuevas no coinciden');
       return;
     }
-    if (passwords.newPass.length < 6) {
-      toast.error('La contraseña debe tener al menos 6 caracteres');
+    if (passwords.newPass.length < 8) {
+      toast.error('La contraseña debe tener al menos 8 caracteres');
       return;
     }
 
-    // Simulate API Call
-    setTimeout(() => {
+    setIsSavingPassword(true);
+    try {
+      await api.put('/auth/me/password', {
+        currentPassword: passwords.current,
+        newPassword: passwords.newPass,
+      });
       setIsChangingPassword(false);
       setPasswords({ current: '', newPass: '', confirm: '' });
       toast.success('Contraseña cambiada exitosamente');
-    }, 800);
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'No se pudo cambiar la contraseña');
+    } finally {
+      setIsSavingPassword(false);
+    }
   };
 
   return (
@@ -117,20 +142,12 @@ export default function Profile() {
             <div className="flex flex-wrap justify-center md:justify-start gap-3">
               <button
                 onClick={() => setIsEditingInfo(true)}
-                className="px-5 py-2.5 bg-white/10 hover:bg-white/20 border border-white/30 text-white font-semibold rounded-xl transition-all flex items-center gap-2 text-sm backdrop-blur-sm"
+                title="Editar perfil"
+                aria-label="Editar perfil"
+                className="w-11 h-11 bg-white/10 hover:bg-white/20 border border-white/30 text-white rounded-xl transition-all flex items-center justify-center backdrop-blur-sm"
               >
-                <Save size={16} /> Editar perfil
+                <Pencil size={18} />
               </button>
-
-              <label className="px-5 py-2.5 bg-white/10 hover:bg-white/20 border border-white/30 text-white font-semibold rounded-xl transition-all flex items-center gap-2 text-sm backdrop-blur-sm cursor-pointer">
-                <Camera size={16} /> Cambiar foto
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handlePhotoChange}
-                />
-              </label>
             </div>
           </div>
 
@@ -139,21 +156,22 @@ export default function Profile() {
             <div
               className="w-32 h-32 md:w-36 md:h-36 rounded-full flex items-center justify-center text-4xl font-extrabold text-[#2560aa] shadow-lg overflow-hidden border-4 border-white bg-white transition-all duration-300"
             >
-              {profilePhoto ? (
-                <img src={profilePhoto} alt="Profile" className="w-full h-full object-cover" />
+              {user?.photoUrl ? (
+                <img src={user.photoUrl} alt="Profile" className="w-full h-full object-cover" />
               ) : (
                 user?.fullName?.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || 'U'
               )}
             </div>
 
             {/* Quick Camera Button (bottom right of avatar) */}
-            <label className="absolute bottom-0 right-0 p-2.5 bg-[#51abcd] hover:bg-[#3d98ba] text-white rounded-full shadow-lg cursor-pointer transition-colors border-2 border-white">
+            <label className={`absolute bottom-0 right-0 p-2.5 bg-[#51abcd] hover:bg-[#3d98ba] text-white rounded-full shadow-lg cursor-pointer transition-colors border-2 border-white ${isUploadingPhoto ? 'opacity-50 pointer-events-none' : ''}`}>
               <Camera size={18} />
               <input
                 type="file"
                 ref={fileInputRef}
                 accept="image/*"
                 className="hidden"
+                disabled={isUploadingPhoto}
                 onChange={handlePhotoChange}
               />
             </label>
@@ -237,15 +255,20 @@ export default function Profile() {
                     setIsEditingInfo(false);
                     setFormData({ fullName: user?.fullName || '', email: user?.email || '' });
                   }}
-                  className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold rounded-xl transition-all"
+                  title="Cancelar"
+                  aria-label="Cancelar"
+                  className="w-11 h-11 flex items-center justify-center bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-xl transition-all"
                 >
-                  Cancelar
+                  <X size={18} />
                 </button>
                 <button
                   onClick={handleSaveInfo}
-                  className="px-6 py-2.5 bg-[#2b7bf5] hover:bg-[#1f66d3] text-white font-bold rounded-xl shadow-lg shadow-blue-500/30 transition-all hover:scale-105 flex items-center gap-2"
+                  disabled={isSavingInfo}
+                  title={isSavingInfo ? 'Guardando...' : 'Guardar cambios'}
+                  aria-label="Guardar cambios"
+                  className="w-11 h-11 flex items-center justify-center bg-[#2b7bf5] hover:bg-[#1f66d3] text-white rounded-xl shadow-lg shadow-blue-500/30 transition-all hover:scale-105 disabled:opacity-60 disabled:pointer-events-none"
                 >
-                  <Save size={18} /> Guardar Cambios
+                  <Save size={18} />
                 </button>
               </div>
             )}
@@ -254,23 +277,27 @@ export default function Profile() {
 
         {/* Security */}
         <div className="bg-white dark:bg-slate-800 rounded-3xl p-8 shadow-sm border border-slate-200 dark:border-slate-700 transition-all">
-          <h3 className="text-lg font-extrabold text-slate-800 dark:text-white mb-2 flex items-center gap-2">
-            <Key size={22} className="text-[#4c3ce6]" />
-            Seguridad
-          </h3>
-
-          {!isChangingPassword ? (
-            <div>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 font-medium leading-relaxed">
-                Asegúrate de utilizar una contraseña segura y actualizarla regularmente para proteger el acceso al sistema.
-              </p>
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="text-lg font-extrabold text-slate-800 dark:text-white flex items-center gap-2">
+              <Key size={22} className="text-[#4c3ce6]" />
+              Seguridad
+            </h3>
+            {!isChangingPassword && (
               <button
                 onClick={() => setIsChangingPassword(true)}
-                className="px-6 py-2.5 bg-slate-50 hover:bg-slate-100 dark:bg-slate-700/50 dark:hover:bg-slate-700 border-2 border-slate-200 dark:border-slate-600 hover:border-[#4c3ce6] text-slate-700 dark:text-slate-200 font-bold rounded-xl transition-all flex items-center gap-2"
+                title="Cambiar contraseña"
+                aria-label="Cambiar contraseña"
+                className="w-11 h-11 flex items-center justify-center bg-slate-50 hover:bg-slate-100 dark:bg-slate-700/50 dark:hover:bg-slate-700 border-2 border-slate-200 dark:border-slate-600 hover:border-[#4c3ce6] text-slate-700 dark:text-slate-200 rounded-xl transition-all"
               >
-                <Lock size={18} /> Cambiar contraseña
+                <Lock size={18} />
               </button>
-            </div>
+            )}
+          </div>
+
+          {!isChangingPassword ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
+              Asegúrate de utilizar una contraseña segura y actualizarla regularmente para proteger el acceso al sistema.
+            </p>
           ) : (
             <div className="space-y-4 animate-fade-in-up pt-4">
               <div>
@@ -318,15 +345,20 @@ export default function Profile() {
                     setIsChangingPassword(false);
                     setPasswords({ current: '', newPass: '', confirm: '' });
                   }}
-                  className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold rounded-xl transition-all"
+                  title="Cancelar"
+                  aria-label="Cancelar"
+                  className="w-11 h-11 flex items-center justify-center bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 rounded-xl transition-all"
                 >
-                  Cancelar
+                  <X size={18} />
                 </button>
                 <button
                   onClick={handleSavePassword}
-                  className="px-6 py-2.5 bg-[#4c3ce6] hover:bg-[#3d30b8] text-white font-bold rounded-xl shadow-lg shadow-purple-500/30 transition-all hover:scale-105 flex items-center gap-2"
+                  disabled={isSavingPassword}
+                  title={isSavingPassword ? 'Actualizando...' : 'Actualizar contraseña'}
+                  aria-label="Actualizar contraseña"
+                  className="w-11 h-11 flex items-center justify-center bg-[#4c3ce6] hover:bg-[#3d30b8] text-white rounded-xl shadow-lg shadow-purple-500/30 transition-all hover:scale-105 disabled:opacity-60 disabled:pointer-events-none"
                 >
-                  <CheckCircle2 size={18} /> Actualizar
+                  <Check size={18} />
                 </button>
               </div>
             </div>

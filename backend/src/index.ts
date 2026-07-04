@@ -6,6 +6,7 @@
 // =============================================================
 
 import 'dotenv/config';
+import 'express-async-errors'; // hace que los errores de handlers async lleguen al middleware de error de abajo, en vez de tumbar el proceso
 import express from 'express';
 import { prisma } from './prisma';
 import cors from 'cors';
@@ -206,6 +207,13 @@ app.use('/api/batches',      batches);       // Citas de empresa
 // -- Bot externo (WhatsApp u otro canal, desarrollado por 3er ingeniero) --
 // Auth: JWT con role AGENT — generar con: npm run agent:token
 app.use('/api/agent',        agent);
+
+// Red de seguridad: sin esto, cualquier error no capturado en una ruta
+// (ej. una promesa rechazada) tumba todo el proceso en vez de responder 500.
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('[unhandled]', err);
+  res.status(500).json({ error: 'Error interno del servidor' });
+});
 
 // =============================================================
 // INICIO DEL SERVIDOR

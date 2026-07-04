@@ -1,9 +1,38 @@
 import { Router } from 'express';
+import multer from 'multer';
+import fs from 'fs';
+import path from 'path';
 import { prisma } from '../prisma';
 import { authRequired, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 router.use(authRequired);
+
+// ── Subida de foto de paciente ───────────────────────────────────────
+// Almacenamiento: archivo en disco (UPLOAD_DIR) + solo la ruta en la BD.
+// Mismo patron que prescriptions.ts (memoryStorage → escribir → /uploads/xxx).
+const UPLOAD_DIR = process.env.UPLOAD_DIR || '/app/uploads';
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
+
+// Valida el tipo real por magic bytes (no confiar en el mimetype del header)
+function sniffImage(buf: Buffer): 'jpg' | 'png' | 'webp' | null {
+  if (buf.length < 12) return null;
+  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'jpg';
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return 'png';
+  if (buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') return 'webp';
+  return null;
+}
+
+// POST /api/surveys/photo — sube la foto ya procesada y devuelve su ruta
+router.post('/photo', upload.single('photo'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No se recibió imagen' });
+  const kind = sniffImage(req.file.buffer);
+  if (!kind) return res.status(400).json({ error: 'Formato no permitido (usa JPG, PNG o WEBP)' });
+  const filename = `patient_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${kind}`;
+  fs.writeFileSync(path.join(UPLOAD_DIR, filename), req.file.buffer);
+  res.status(201).json({ url: `/uploads/${filename}` });
+});
 
 // POST /api/surveys — guardar encuesta y registrar/actualizar paciente
 router.post('/', async (req: AuthRequest, res) => {
@@ -24,6 +53,7 @@ router.post('/', async (req: AuthRequest, res) => {
           gender: null,
           medicalNotes: null,
           company: d.empresa || null,
+          photoUrl: d.photoUrl || null,
         },
       });
       patientId = patient.id;
@@ -36,6 +66,7 @@ router.post('/', async (req: AuthRequest, res) => {
           email: d.correo || undefined,
           nss: d.nss || undefined,
           company: d.empresa || undefined,
+          photoUrl: d.photoUrl || undefined,
         },
       });
     }
@@ -136,6 +167,7 @@ router.put('/:id', async (req, res) => {
           email: d.correo || undefined,
           nss: d.nss || undefined,
           company: d.empresa || undefined,
+          photoUrl: d.photoUrl || undefined,
         },
       });
     }

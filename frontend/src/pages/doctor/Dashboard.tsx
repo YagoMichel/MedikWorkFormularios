@@ -6,20 +6,32 @@ import { Users, Calendar as CalendarIcon, Clock, TrendingUp, CalendarCheck, Shie
 import toast from 'react-hot-toast';
 
 import { useState, useEffect } from 'react';
+import { socket } from '../../services/socket';
 
 export default function DoctorDashboard() {
   const user = useAuth((s) => s.user);
   const qc = useQueryClient();
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
-  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user?.id) {
-      const savedPhoto = localStorage.getItem(`profile_photo_${user.id}`);
-      if (savedPhoto) setProfilePhoto(savedPhoto);
-    }
-  }, [user?.id]);
+    if (!socket.connected) socket.connect();
+    const handler = () => qc.invalidateQueries({ queryKey: ['dashboard-doctor'] });
+    socket.on('appointments:updated', handler);
+    socket.on('newAppointment', handler);
+    socket.on('newBatch', handler);
+    socket.on('batch:updated', handler);
+    socket.on('batch:status_updated', handler);
+    socket.on('newPatient', handler);
+    return () => {
+      socket.off('appointments:updated', handler);
+      socket.off('newAppointment', handler);
+      socket.off('newBatch', handler);
+      socket.off('batch:updated', handler);
+      socket.off('batch:status_updated', handler);
+      socket.off('newPatient', handler);
+    };
+  }, [qc]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard-doctor'],
@@ -79,8 +91,8 @@ export default function DoctorDashboard() {
         {/* Avatar */}
         <div className="relative z-10 hidden sm:block shrink-0">
           <button onClick={() => setShowPhotoModal(true)} className="block w-28 h-28 rounded-full flex items-center justify-center text-3xl font-extrabold text-[#2560aa] shadow-2xl overflow-hidden border-4 border-white bg-white transition-transform hover:scale-105 cursor-pointer">
-            {profilePhoto ? (
-              <img src={profilePhoto} alt="Profile" className="w-full h-full object-cover" />
+            {user?.photoUrl ? (
+              <img src={user.photoUrl} alt="Profile" className="w-full h-full object-cover" />
             ) : (
               user?.fullName?.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || 'U'
             )}
@@ -161,26 +173,30 @@ export default function DoctorDashboard() {
 
                 return combined.map((cita: any) => {
                   const isBatch = cita.isBatch;
-                  const title = isBatch ? (cita.company?.name === 'Sin Empresa' ? 'Citas Individuales (Jornada)' : `Jornada: ${cita.company?.name || 'Empresa'}`) : (cita.patient?.fullName || 'Paciente');
-                  const subtitle = isBatch ? `${cita.expectedCount} pacientes esperados` : cita.status;
+                  const title = isBatch ? (cita.company?.name === 'Sin Empresa' ? 'Jornada (Sin Empresa)' : `Jornada: ${cita.company?.name}`) : (cita.patient?.fullName || 'Cita');
                   const initial = isBatch ? 'J' : (cita.patient?.fullName?.charAt(0).toUpperCase() || 'P');
-                  
                   const hora = new Date(cita.date).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+                  const subtitle = isBatch ? `${cita.expectedCount} pacientes esperados` : cita.status;
+                  
                   return (
                     <div key={isBatch ? `b-${cita.id}` : cita.id} className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-4 border border-slate-100 dark:border-slate-700 flex justify-between items-center transition hover:shadow-md hover:border-[#51abcd]/30 group">
                       <div className="flex items-center gap-4">
                         <div className={`w-10 h-10 rounded-full ${isBatch ? 'bg-gradient-to-br from-[#51abcd] to-[#2560aa]' : 'bg-gradient-to-br from-[#2560aa] to-[#51abcd]'} text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-sm`}>
                           {initial}
                         </div>
-                        <div className="min-w-0">
-                          <div className="text-sm font-bold text-slate-800 dark:text-white truncate max-w-[140px] sm:max-w-[200px]">{title}</div>
-                          <div className="text-[11px] text-[#51abcd] font-semibold uppercase tracking-wider mt-0.5">{subtitle}</div>
+                        <div>
+                          <div className="text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-[#2560aa] transition-colors">{title}</div>
+                          <div className="text-xs text-slate-500 font-medium">
+                            {subtitle}
+                          </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-3 shrink-0">
-                        <div className="text-xs font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 shadow-sm px-3 py-1.5 rounded-lg border border-slate-100 dark:border-slate-600">
-                          {hora}
-                        </div>
+                          {!isBatch && (
+                            <div className="text-xs font-bold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 shadow-sm px-3 py-1.5 rounded-lg border border-slate-100 dark:border-slate-600">
+                              {hora}
+                            </div>
+                          )}
                         {(isBatch ? cita.status !== 'CERRADO' && cita.status !== 'CANCELADO' : cita.status !== 'ATENDIDA' && cita.status !== 'CANCELADA') && (
                           <button 
                             onClick={() => {
@@ -228,18 +244,22 @@ export default function DoctorDashboard() {
             {data.activities && data.activities.length > 0 ? data.activities.slice(0, 4).map((act: any, idx: number) => {
               const date = new Date(act.date);
               const isPatient = act.type === 'NEW_PATIENT';
+              const isBatch = act.type === 'NEW_BATCH';
+              const isIndividual = act.type === 'NEW_APPOINTMENT';
+              
+              let bgColor = isPatient ? 'bg-emerald-50 dark:bg-emerald-900/20' : isBatch ? 'bg-[#51abcd]/10 dark:bg-[#51abcd]/20' : 'bg-[#2560aa]/10 dark:bg-[#2560aa]/20';
+              let textColor = isPatient ? 'text-emerald-500' : isBatch ? 'text-[#51abcd]' : 'text-[#2560aa]';
+              
               return (
                 <div key={idx} className="flex items-center gap-4 group cursor-default">
-                  <div className={`w-12 h-12 rounded-2xl flex shrink-0 items-center justify-center shadow-sm transition-transform group-hover:scale-105 ${
-                    isPatient ? 'bg-emerald-50 text-emerald-500' : 'bg-[#f0f7ff] text-[#2560aa]'
-                  }`}>
+                  <div className={`w-12 h-12 rounded-2xl flex shrink-0 items-center justify-center shadow-sm transition-transform group-hover:scale-105 ${bgColor} ${textColor}`}>
                     {isPatient ? <UserPlus size={20} /> : <CalendarIcon size={20} />}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-bold text-slate-800 dark:text-slate-200 truncate group-hover:text-[#2560aa] transition-colors">{act.title}</div>
+                    <div className={`text-sm font-bold text-slate-800 dark:text-slate-200 truncate transition-colors group-hover:${textColor}`}>{act.title}</div>
                     <div className="text-xs font-medium text-slate-500 truncate mt-0.5">{act.subtitle}</div>
                   </div>
-                  <div className="text-[11px] font-semibold text-slate-400 text-right shrink-0 bg-slate-50 px-2.5 py-1 rounded-lg">
+                  <div className="text-[11px] font-semibold text-slate-400 text-right shrink-0 bg-slate-50 dark:bg-slate-800 px-2.5 py-1 rounded-lg">
                     {date.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
                   </div>
                 </div>
@@ -276,11 +296,15 @@ export default function DoctorDashboard() {
               {data.activities?.map((act: any, idx: number) => {
                 const date = new Date(act.date);
                 const isPatient = act.type === 'NEW_PATIENT';
+                const isBatch = act.type === 'NEW_BATCH';
+                const isIndividual = act.type === 'NEW_APPOINTMENT';
+                
+                let bgColor = isPatient ? 'bg-emerald-50 dark:bg-emerald-900/20' : isBatch ? 'bg-[#51abcd]/10 dark:bg-[#51abcd]/20' : 'bg-[#2560aa]/10 dark:bg-[#2560aa]/20';
+                let textColor = isPatient ? 'text-emerald-500' : isBatch ? 'text-[#51abcd]' : 'text-[#2560aa]';
+
                 return (
-                  <div key={idx} className="flex items-center gap-4 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700 transition hover:border-blue-200 dark:hover:border-slate-600">
-                    <div className={`w-10 h-10 rounded-full flex shrink-0 items-center justify-center ${
-                      isPatient ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-500' : 'bg-purple-50 dark:bg-purple-900/20 text-purple-500'
-                    }`}>
+                  <div key={idx} className="flex items-center gap-4 bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-100 dark:border-slate-700 transition hover:border-slate-300 dark:hover:border-slate-600">
+                    <div className={`w-10 h-10 rounded-full flex shrink-0 items-center justify-center ${bgColor} ${textColor}`}>
                       {isPatient ? <UserPlus size={18} /> : <CalendarIcon size={18} />}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -308,8 +332,8 @@ export default function DoctorDashboard() {
               <span className="material-symbols-rounded text-4xl">close</span>
             </button>
             <div className="w-64 h-64 sm:w-80 sm:h-80 rounded-full border-4 border-white shadow-2xl overflow-hidden bg-white flex items-center justify-center text-8xl font-extrabold text-[#2560aa] animate-scale-in">
-              {profilePhoto ? (
-                <img src={profilePhoto} alt="Profile Large" className="w-full h-full object-cover" />
+              {user?.photoUrl ? (
+                <img src={user.photoUrl} alt="Profile Large" className="w-full h-full object-cover" />
               ) : (
                 user?.fullName?.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || 'U'
               )}

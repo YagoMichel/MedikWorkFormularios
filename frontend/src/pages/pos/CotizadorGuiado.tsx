@@ -232,12 +232,14 @@ export default function CotizadorGuiado({ onAdd }: { onAdd: (items: CotItem[]) =
       {/* Step indicator */}
       <div className="flex flex-wrap gap-1">
         {steps.map((s, i) => (
-          <div key={s.key} style={{
-            flex: 1, minWidth: 80, padding: '6px 8px', borderRadius: 6,
-            background: i === stepIdx ? '#2563eb' : i < stepIdx ? '#dbeafe' : '#f1f5f9',
-            color: i === stepIdx ? '#fff' : i < stepIdx ? '#1e40af' : '#94a3b8',
-            fontSize: 11, fontWeight: 700, textAlign: 'center',
-          }}>{i + 1}. {s.label}</div>
+          <div key={s.key} className={`flex-1 min-w-[80px] px-2 py-1.5 rounded-md text-[11px] font-bold text-center transition-colors
+            ${i === stepIdx 
+              ? 'bg-blue-600 text-white' 
+              : i < stepIdx 
+                ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300' 
+                : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500'}`}>
+            {i + 1}. {s.label}
+          </div>
         ))}
       </div>
 
@@ -307,9 +309,9 @@ export default function CotizadorGuiado({ onAdd }: { onAdd: (items: CotItem[]) =
 
       {/* Preview total */}
       {itemsCot.length > 0 && step !== 'resumen' && (
-        <div style={{ background: '#eff6ff', padding: '8px 12px', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
-          <span style={{ color: '#475569' }}>{itemsCot.length} concepto{itemsCot.length !== 1 ? 's' : ''}</span>
-          <span style={{ color: '#2563eb', fontWeight: 700, fontSize: 15 }}>{fmt(total)}</span>
+        <div className="flex justify-between items-center bg-blue-50 dark:bg-blue-900/30 px-3 py-2 rounded-xl text-[13px]">
+          <span className="text-slate-600 dark:text-slate-400">{itemsCot.length} concepto{itemsCot.length !== 1 ? 's' : ''}</span>
+          <span className="text-blue-600 dark:text-blue-400 font-bold text-[15px]">{fmt(total)}</span>
         </div>
       )}
 
@@ -339,17 +341,15 @@ function StepTipo({ selected, onSelect }: { selected: CotTipo | null; onSelect: 
         <button
           key={o.key}
           onClick={() => onSelect(o.key)}
-          className="w-full text-left flex items-center gap-3"
-          style={{
-            padding: '12px 14px', borderRadius: 10,
-            border: selected === o.key ? '2px solid #2563eb' : '2px solid #e2e8f0',
-            background: selected === o.key ? '#eff6ff' : '#fff', cursor: 'pointer', transition: 'all 0.15s',
-          }}
+          className={`w-full text-left flex items-center gap-3 p-3 rounded-xl border-2 transition-all cursor-pointer
+            ${selected === o.key 
+              ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/30' 
+              : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750'}`}
         >
-          <span className="material-symbols-rounded" style={{ fontSize: 28, color: selected === o.key ? '#2563eb' : '#64748b' }}>{o.icon}</span>
+          <span className="material-symbols-rounded text-[28px]" style={{ color: selected === o.key ? 'var(--primary-600)' : 'var(--text-muted)' }}>{o.icon}</span>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>{o.label}</div>
-            <div style={{ fontSize: 12, color: '#64748b' }}>{o.desc}</div>
+            <div className="text-[14px] font-bold text-slate-800 dark:text-slate-200">{o.label}</div>
+            <div className="text-[12px] text-slate-500 dark:text-slate-400">{o.desc}</div>
           </div>
         </button>
       ))}
@@ -381,16 +381,13 @@ function StepArmazon({ armazones, selected, search, setSearch, onSelect }: {
             <button
               key={brand}
               onClick={() => onSelect(armazon)}
-              className="w-full grid items-center text-left"
-              style={{
-                gridTemplateColumns: '1fr 90px 110px', padding: '8px 12px',
-                borderBottom: '1px solid #f1f5f9', background: sel ? '#eff6ff' : '#fff',
-                cursor: 'pointer', fontSize: 13,
-              }}
+              className={`w-full grid items-center text-left px-3 py-2 text-[13px] border-b border-slate-100 dark:border-slate-700/50 cursor-pointer
+                ${sel ? 'bg-blue-50 dark:bg-blue-900/30' : 'bg-white dark:bg-slate-800'}`}
+              style={{ gridTemplateColumns: '1fr 90px 110px' }}
             >
-              <span style={{ fontWeight: sel ? 700 : 500, color: '#1e293b' }}>{brand}</span>
-              <span style={{ textAlign: 'right', color: '#475569' }}>Arm: ${armazon!.salePrice}</span>
-              <span style={{ textAlign: 'right', color: hxar ? '#475569' : '#cbd5e1', fontSize: 12 }}>
+              <span className={`${sel ? 'font-bold' : 'font-medium'} text-slate-800 dark:text-slate-200`}>{brand}</span>
+              <span className="text-right text-slate-600 dark:text-slate-400">Arm: ${armazon!.salePrice}</span>
+              <span className={`text-right text-[12px] ${hxar ? 'text-slate-600 dark:text-slate-400' : 'text-slate-300 dark:text-slate-600'}`}>
                 {hxar ? `HX AR: $${hxar.salePrice}` : 'sin HX AR'}
               </span>
             </button>
@@ -409,23 +406,22 @@ function StepModo({ armazon, hxar, selected, onSelect }: {
     <button
       onClick={() => !disabled && onSelect(k)}
       disabled={disabled}
-      className="w-full text-left"
-      style={{
-        padding: '12px 14px', borderRadius: 10,
-        border: selected === k ? '2px solid #2563eb' : '2px solid #e2e8f0',
-        background: disabled ? '#f1f5f9' : selected === k ? '#eff6ff' : '#fff',
-        cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.55 : 1,
-      }}
+      className={`w-full text-left p-3 rounded-xl border-2 transition-all 
+        ${disabled 
+          ? 'bg-slate-100 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 cursor-not-allowed opacity-55' 
+          : selected === k 
+            ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/30 cursor-pointer' 
+            : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700'}`}
     >
-      <div style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>{title} {price && <span style={{ color: '#2563eb' }}>— {price}</span>}</div>
-      <div style={{ fontSize: 12, color: '#64748b' }}>{desc}</div>
+      <div className="text-[14px] font-bold text-slate-800 dark:text-slate-200">{title} {price && <span className="text-blue-600">— {price}</span>}</div>
+      <div className="text-[12px] text-slate-500 dark:text-slate-400">{desc}</div>
     </button>
   );
   return (
     <div className="space-y-3">
-      <div style={{ padding: '10px 12px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
-        <div style={{ fontSize: 11, color: '#64748b' }}>Armazón seleccionado</div>
-        <div style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>{armazon.name}</div>
+      <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
+        <div className="text-[11px] text-slate-500 dark:text-slate-400">Armazón seleccionado</div>
+        <div className="text-[14px] font-bold text-slate-800 dark:text-slate-200">{armazon.name}</div>
       </div>
       <p className="text-sm text-slate-600">¿Cómo lo vas a cotizar?</p>
       <Opt k="solo"          title="Solo armazón"     desc="Solo el armazón sin mica ni tratamiento"        price={`$${armazon.salePrice}`} />
@@ -447,32 +443,26 @@ function StepLenteSeg({ brandMap, selected, onSelect }: {
     return (
       <button
         onClick={() => onSelect(p)}
-        style={{
-          width: '100%', padding: '5px 6px', borderRadius: 6,
-          background: sel ? '#2563eb' : 'transparent', color: sel ? '#fff' : '#1e293b',
-          border: sel ? '2px solid #2563eb' : '2px solid transparent',
-          fontSize: 13, fontWeight: 700, cursor: 'pointer',
-        }}
-      >${p.salePrice}</button>
+        className={`w-full px-1.5 py-1 rounded-md text-[13px] font-bold border-2 cursor-pointer transition-colors
+          ${sel ? 'bg-blue-600 border-blue-600 text-white' : 'bg-transparent border-transparent text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+      >
+        ${p.salePrice}
+      </button>
     );
   };
   return (
     <div className="space-y-2">
       <p className="text-sm text-slate-600">Selecciona tratamiento y rango</p>
       <div className="rounded-lg overflow-hidden border" style={{ borderColor: '#e2e8f0' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px 90px 100px', background: '#6ba3dd', color: '#fff', fontSize: 11, fontWeight: 700 }}>
+        <div className="grid grid-cols-[1fr_90px_90px_100px] bg-blue-500 text-white text-[11px] font-bold">
           <div style={{ padding: '6px 10px' }}>TRATAMIENTO</div>
           <div style={{ padding: '6px 4px', textAlign: 'center' }}>BAJAS</div>
           <div style={{ padding: '6px 4px', textAlign: 'center' }}>ALTAS</div>
           <div style={{ padding: '6px 4px', textAlign: 'center' }}>PROCESADO</div>
         </div>
         {Array.from(brandMap.entries()).map(([brand, { bajas, altas, procesado }], i) => (
-          <div key={brand} style={{
-            display: 'grid', gridTemplateColumns: '1fr 90px 90px 100px',
-            background: i % 2 === 0 ? '#fff' : '#f8fafc',
-            borderTop: '1px solid #f1f5f9', alignItems: 'center',
-          }}>
-            <div style={{ padding: '4px 10px', fontSize: 12, color: '#1e293b', fontWeight: 600 }}>{brand}</div>
+          <div key={brand} className={`grid grid-cols-[1fr_90px_90px_100px] border-t border-slate-100 dark:border-slate-700/50 items-center ${i % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-slate-50 dark:bg-slate-800/50'}`}>
+            <div className="px-2.5 py-1 text-[12px] font-semibold text-slate-800 dark:text-slate-200">{brand}</div>
             <div style={{ padding: '4px' }}><Cell p={bajas} /></div>
             <div style={{ padding: '4px' }}><Cell p={altas} /></div>
             <div style={{ padding: '4px' }}><Cell p={procesado} /></div>
@@ -507,13 +497,11 @@ function StepMica({ micasPorGrupo, selected, onSelect }: {
                   <button
                     key={brand}
                     onClick={() => onSelect(g.key, brand)}
-                    style={{
-                      padding: '6px 12px', borderRadius: 6,
-                      background: sel ? '#2563eb' : '#f1f5f9',
-                      color: sel ? '#fff' : '#1e293b',
-                      border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                    }}
-                  >{brand}</button>
+                    className={`px-3 py-1.5 rounded-md text-[12px] font-semibold cursor-pointer transition-colors
+                      ${sel ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
+                  >
+                    {brand}
+                  </button>
                 );
               })}
             </div>
@@ -536,9 +524,9 @@ function StepTratamiento({ brand, tipos, selected, onSelect }: {
   const available = [...known, ...rest];
   return (
     <div className="space-y-3">
-      <div style={{ padding: '10px 12px', background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
-        <div style={{ fontSize: 11, color: '#64748b' }}>Mica seleccionada</div>
-        <div style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>{brand}</div>
+      <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
+        <div className="text-[11px] text-slate-500 dark:text-slate-400">Mica seleccionada</div>
+        <div className="text-[14px] font-bold text-slate-800 dark:text-slate-200">{brand}</div>
       </div>
       <p className="text-sm text-slate-600">Selecciona el tratamiento</p>
       <div className="grid grid-cols-2 gap-2">
@@ -549,14 +537,11 @@ function StepTratamiento({ brand, tipos, selected, onSelect }: {
             <button
               key={k}
               onClick={() => onSelect(p)}
-              style={{
-                padding: '10px 12px', borderRadius: 8,
-                border: sel ? '2px solid #2563eb' : '2px solid #e2e8f0',
-                background: sel ? '#eff6ff' : '#fff', cursor: 'pointer', textAlign: 'left',
-              }}
+              className={`p-3 rounded-xl border-2 text-left cursor-pointer transition-colors
+                ${sel ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/30' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-750'}`}
             >
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#1e293b' }}>{TIPO_LABELS[k] || k.toUpperCase()}</div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: '#2563eb' }}>${p.salePrice}</div>
+              <div className="text-[12px] font-bold text-slate-800 dark:text-slate-200">{TIPO_LABELS[k] || k.toUpperCase()}</div>
+              <div className="text-[14px] font-bold text-blue-600">${p.salePrice}</div>
             </button>
           );
         })}
@@ -583,16 +568,11 @@ function StepExtras({ solares, biseles, accesorios, selected, onToggle }: {
               <button
                 key={p.id}
                 onClick={() => onToggle(p.id)}
-                style={{
-                  padding: '6px 10px', borderRadius: 6,
-                  background: sel ? '#2563eb' : '#f1f5f9',
-                  color: sel ? '#fff' : '#1e293b',
-                  border: 'none', fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                  display: 'flex', gap: 6, alignItems: 'center',
-                }}
+                className={`px-2.5 py-1.5 rounded-md text-[12px] font-semibold cursor-pointer flex items-center gap-1.5 transition-colors
+                  ${sel ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800/80 text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
               >
-                {sel && <span style={{ fontSize: 11 }}>✓</span>}
-                {p.name}{p.salePrice > 0 && <span style={{ opacity: 0.75 }}>${p.salePrice}</span>}
+                {sel && <span className="text-[11px]">✓</span>}
+                {p.name}{p.salePrice > 0 && <span className="opacity-75">${p.salePrice}</span>}
               </button>
             );
           })}
@@ -621,22 +601,16 @@ function StepResumen({ items, total }: { items: CotItem[]; total: number }) {
       <p className="text-sm text-slate-600">Resumen de la cotización</p>
       <div className="rounded-lg border overflow-hidden" style={{ borderColor: '#e2e8f0' }}>
         {items.map((it, i) => (
-          <div key={i} style={{
-            display: 'grid', gridTemplateColumns: '1fr 100px',
-            padding: '8px 12px', fontSize: 13, color: '#1e293b',
-            borderTop: i > 0 ? '1px solid #f1f5f9' : 'none',
-            background: i % 2 === 0 ? '#fff' : '#f8fafc',
-          }}>
-            <div style={{ fontWeight: 500 }}>{it.product.name}</div>
-            <div style={{ textAlign: 'right', fontWeight: 700 }}>${it.product.salePrice}</div>
+          <div key={i} className={`grid grid-cols-[1fr_100px] px-3 py-2 text-[13px] text-slate-800 dark:text-slate-200
+            ${i > 0 ? 'border-t border-slate-100 dark:border-slate-700/50' : ''}
+            ${i % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-slate-50 dark:bg-slate-800/50'}`}>
+            <div className="font-medium">{it.product.name}</div>
+            <div className="text-right font-bold">${it.product.salePrice}</div>
           </div>
         ))}
-        <div style={{
-          display: 'grid', gridTemplateColumns: '1fr 100px',
-          padding: '10px 12px', background: '#eff6ff', borderTop: '2px solid #2563eb',
-        }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: '#1e293b' }}>Total</div>
-          <div style={{ textAlign: 'right', fontSize: 16, fontWeight: 800, color: '#2563eb' }}>{fmt(total)}</div>
+        <div className="grid grid-cols-[1fr_100px] px-3 py-2.5 bg-blue-50 dark:bg-blue-900/30 border-t-2 border-blue-600">
+          <div className="text-[14px] font-bold text-slate-800 dark:text-slate-200">Total</div>
+          <div className="text-right text-[16px] font-extrabold text-blue-600 dark:text-blue-400">{fmt(total)}</div>
         </div>
       </div>
     </div>

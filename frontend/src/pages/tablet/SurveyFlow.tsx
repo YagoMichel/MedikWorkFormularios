@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { api } from '../../services/api';
 import toast from 'react-hot-toast';
+import PatientPhotoCapture from '../../components/PatientPhotoCapture';
 
 // ── Dataset SEPOMEX local (generado con npm run seed:sepomex) ────────
 type SepomexRow = { e: string; m: string; c: string[] };
@@ -509,6 +510,7 @@ const ANTECEDENTES_PATOLOGICOS = [
 type Step = 'tipo' | 'buscar' | 'form' | 'done';
 
 const empty = {
+  photoUrl: '',
   empresa: '', tipoExamen: '', otroTipo: '', actividades: '',
   nombre: '', edad: '', tipoSangre: '', puestoDeTrabajo: '',
   lada: '+52', celular: '',
@@ -1308,6 +1310,8 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
         {/* ── PASO 2: Datos personales ─────────────────────── */}
         {formStep === 2 && <section className="card space-y-4">
           <SectionHeader icon="person" title="Datos personales" color={FORM_STEPS[1].color} />
+
+          <PatientPhotoCapture value={form.photoUrl} onChange={url => set('photoUrl', url)} />
 
           <Field label="Nombre completo *">
             <input className="input" required placeholder="Ej. Juan Pérez García"

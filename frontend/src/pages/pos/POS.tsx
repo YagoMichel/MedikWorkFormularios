@@ -13,6 +13,7 @@ import toast from 'react-hot-toast';
 import {
   Trash2, Search, ShoppingBag, User, Eye,
   CreditCard, CheckCircle2, Wallet, Banknote, Download,
+  Glasses, Plus, Clock, Disc, Sparkles, Shield, VenetianMask, Disc3, Circle, Sparkle
 } from 'lucide-react';
 import CotizadorGuiado, { type CotItem } from './CotizadorGuiado';
 import logoUrl from '../../assets/logo.png';
@@ -266,22 +267,25 @@ export default function POS() {
         </div>
         <div className="flex gap-2">
           <button
-            className={`tab-btn ${tab === 'nueva' ? 'active' : ''}`}
+            className={`tab-btn flex items-center gap-2`}
+            style={tab === 'nueva' ? { background: '#3375c8', color: '#fff' } : {}}
             onClick={() => setTab('nueva')}
           >
-            Nueva Cuenta
+            <Plus size={16} /> Nueva Cuenta
           </button>
           <button
-            className={`tab-btn ${tab === 'activas' ? 'active' : ''}`}
+            className={`tab-btn flex items-center gap-2`}
+            style={tab === 'activas' ? { background: '#3375c8', color: '#fff' } : {}}
             onClick={() => setTab('activas')}
           >
-            Cuentas Pendientes
+            <Clock size={16} /> Cuentas Pendientes
           </button>
           <button
-            className={`tab-btn ${tab === 'pagadas' ? 'active' : ''}`}
+            className={`tab-btn flex items-center gap-2`}
+            style={tab === 'pagadas' ? { background: '#3375c8', color: '#fff' } : {}}
             onClick={() => setTab('pagadas')}
           >
-            Cuentas Pagadas
+            <CheckCircle2 size={16} /> Cuentas Pagadas
           </button>
         </div>
       </div>
@@ -521,10 +525,10 @@ function NuevaCuenta() {
   const [modoVista, setModoVista] = useState<'libre' | 'guiada'>('libre');
 
   const CAT_TABS = [
-    { key: 'armazones',    label: 'Armazones' },
-    { key: 'lentes',       label: 'Lentes de Seguridad' },
-    { key: 'micas',        label: 'Micas' },
-    { key: 'tratamientos', label: 'Tratamientos' },
+    { key: 'armazones',    label: 'Armazones',           icon: <Glasses size={16} /> },
+    { key: 'lentes',       label: 'Lentes de Seguridad', icon: <Glasses size={16} /> },
+    { key: 'micas',        label: 'Micas',               icon: <Disc3 size={16} /> },
+    { key: 'tratamientos', label: 'Tratamientos',        icon: <div className="relative inline-flex items-center justify-center w-4 h-4"><Circle size={14} /><Sparkle size={8} className="absolute -top-0.5 -right-0.5 fill-current" /></div> },
   ] as const;
 
   // Agrega items del cotizador al carrito (con merge por productId)
@@ -558,29 +562,21 @@ function NuevaCuenta() {
         <div className="flex gap-2">
           <button
             onClick={() => setModoVista('libre')}
-            style={{
-              flex: 1, padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700,
-              border: 'none', cursor: 'pointer', transition: 'all 0.15s',
-              background: modoVista === 'libre' ? '#2563eb' : '#fff',
-              color: modoVista === 'libre' ? '#fff' : '#475569',
-              boxShadow: modoVista === 'libre' ? '0 2px 6px rgba(37,99,235,0.25)' : '0 1px 3px rgba(0,0,0,0.06)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-            }}
+            className={`flex-1 py-2.5 px-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-sm
+              ${modoVista === 'libre' 
+                ? 'bg-blue-600 text-white shadow-blue-500/25' 
+                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
           >
-            <Search size={14} /> Selección libre
+            <Search size={16} /> Selección libre
           </button>
           <button
             onClick={() => setModoVista('guiada')}
-            style={{
-              flex: 1, padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 700,
-              border: 'none', cursor: 'pointer', transition: 'all 0.15s',
-              background: modoVista === 'guiada' ? '#2563eb' : '#fff',
-              color: modoVista === 'guiada' ? '#fff' : '#475569',
-              boxShadow: modoVista === 'guiada' ? '0 2px 6px rgba(37,99,235,0.25)' : '0 1px 3px rgba(0,0,0,0.06)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-            }}
+            className={`flex-1 py-2.5 px-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-sm
+              ${modoVista === 'guiada' 
+                ? 'bg-blue-600 text-white shadow-blue-500/25' 
+                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'}`}
           >
-            <span className="material-symbols-rounded" style={{ fontSize: 16 }}>route</span>
+            <span className="material-symbols-rounded text-[18px]">route</span>
             Cotización guiada
           </button>
         </div>
@@ -629,14 +625,12 @@ function NuevaCuenta() {
             <button
               key={t.key}
               onClick={() => setCatTab(t.key)}
-              style={{
-                padding: '6px 14px', fontSize: 13, fontWeight: 600, borderRadius: 8,
-                background: catTab === t.key ? '#2563eb' : '#f1f5f9',
-                color: catTab === t.key ? '#fff' : '#475569',
-                border: 'none', cursor: 'pointer', transition: 'all 0.15s',
-              }}
+              className={`py-1.5 px-3.5 text-[13px] font-semibold rounded-lg flex items-center gap-1.5 transition-all
+                ${catTab === t.key 
+                  ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/25' 
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
             >
-              {t.label}
+              {t.icon} {t.label}
             </button>
           ))}
         </div>
@@ -1345,16 +1339,16 @@ function TablaMatriz({
   const onSaved = () => { qc.invalidateQueries({ queryKey: ['tabla-matriz', grupo] }); qc.invalidateQueries({ queryKey: ['products'] }); };
 
   return (
-    <div className="rounded-xl overflow-hidden border" style={{ borderColor: '#e2e8f0' }}>
+    <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700">
       {grupoLabel && (
-        <div style={{ display: 'grid', gridTemplateColumns: gridCols, background: '#4a8fd4', color: '#fff', fontWeight: 700, fontSize: 12 }}>
+        <div className="grid bg-blue-500 dark:bg-blue-600 text-white font-bold text-[12px]" style={{ gridTemplateColumns: gridCols }}>
           <div></div>
-          <div style={{ gridColumn: `span ${columnas.length}`, textAlign: 'center', padding: '6px 8px', borderLeft: '1px solid #6ba3dd' }}>
+          <div className="text-center border-l border-blue-400 dark:border-blue-500" style={{ gridColumn: `span ${columnas.length}`, padding: '6px 8px' }}>
             {grupoLabel}
           </div>
         </div>
       )}
-      <div style={{ display: 'grid', gridTemplateColumns: gridCols, background: '#6ba3dd', color: '#fff', fontWeight: 700, fontSize: 12 }}>
+      <div className="grid bg-blue-400 dark:bg-blue-500 text-white font-bold text-[12px]" style={{ gridTemplateColumns: gridCols }}>
         <div style={{ padding: '6px 12px' }}>{colHeader}</div>
         {columnas.map((c) => (
           <div key={c.tipo} style={{ padding: '6px 8px', textAlign: 'center' }}>{c.label}</div>
@@ -1366,15 +1360,10 @@ function TablaMatriz({
         return (
           <div
             key={brand}
-            style={{
-              display: 'grid', gridTemplateColumns: gridCols,
-              background: filaActiva ? '#eff6ff' : idx % 2 === 0 ? '#ffffff' : '#f1f5f9',
-              borderTop: '1px solid #e2e8f0',
-              alignItems: 'center',
-              transition: 'background 0.15s',
-            }}
+            className={`grid border-t border-slate-200 dark:border-slate-700 items-center transition-colors ${filaActiva ? 'bg-blue-50 dark:bg-blue-900/30' : idx % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-slate-50 dark:bg-slate-800/50'}`}
+            style={{ gridTemplateColumns: gridCols }}
           >
-            <div style={{ padding: '6px 12px', fontSize: 13, color: '#1e293b', fontWeight: filaActiva ? 700 : 600 }}>{brand}</div>
+            <div className={`px-3 py-1.5 text-[13px] text-slate-800 dark:text-slate-200 ${filaActiva ? 'font-bold' : 'font-medium'}`}>{brand}</div>
             {columnas.map((c) => {
               const p = prods[c.tipo] ?? null;
               return (
@@ -1397,12 +1386,12 @@ function TablaMatriz({
       })}
 
       {brandMap.size === 0 && (
-        <div style={{ textAlign: 'center', padding: '24px', color: '#94a3b8', fontSize: 13 }}>
+        <div className="text-center py-6 text-slate-400 text-[13px]">
           Sin productos en este grupo
         </div>
       )}
       {nota && (
-        <div style={{ padding: '8px 12px', background: '#fef3c7', color: '#92400e', fontSize: 12, fontWeight: 600 }}>
+        <div className="px-3 py-2 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 text-[12px] font-semibold border-t border-amber-100 dark:border-amber-900/30">
           ⚠ {nota}
         </div>
       )}
@@ -1433,8 +1422,8 @@ function TablaLista({
   if (isLoading) return <div className="text-center py-6 text-slate-400 text-sm">Cargando…</div>;
 
   return (
-    <div className="rounded-xl overflow-hidden border" style={{ borderColor: '#e2e8f0' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 160px', background: '#4a8fd4', color: '#fff', fontWeight: 700, fontSize: 13 }}>
+    <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700">
+      <div className="grid bg-blue-500 dark:bg-blue-600 text-white font-bold text-[13px]" style={{ gridTemplateColumns: '1fr 160px' }}>
         <div style={{ padding: '8px 12px' }}>{colHeader}</div>
         <div style={{ padding: '8px 12px', textAlign: 'center' }}>COSTO</div>
       </div>
@@ -1443,14 +1432,10 @@ function TablaLista({
         return (
           <div
             key={p.id}
-            style={{
-              display: 'grid', gridTemplateColumns: '1fr 160px',
-              background: sel ? '#eff6ff' : idx % 2 === 0 ? '#ffffff' : '#f1f5f9',
-              borderTop: '1px solid #e2e8f0',
-              alignItems: 'center',
-            }}
+            className={`grid border-t border-slate-200 dark:border-slate-700 items-center transition-colors ${sel ? 'bg-blue-50 dark:bg-blue-900/30' : idx % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-slate-50 dark:bg-slate-800/50'}`}
+            style={{ gridTemplateColumns: '1fr 160px' }}
           >
-            <div style={{ padding: '6px 12px', fontSize: 13, color: '#1e293b', fontWeight: sel ? 700 : 600 }}>{p.name}</div>
+            <div className={`px-3 py-1.5 text-[13px] text-slate-800 dark:text-slate-200 ${sel ? 'font-bold' : 'font-semibold'}`}>{p.name}</div>
             <div style={{ padding: '4px 8px' }}>
               <PrecioCelda producto={p} seleccionado={sel} onToggle={onToggle} onSaved={onSaved} />
             </div>
@@ -1458,7 +1443,7 @@ function TablaLista({
         );
       })}
       {filtrados.length === 0 && (
-        <div style={{ textAlign: 'center', padding: '24px', color: '#94a3b8', fontSize: 13 }}>Sin elementos</div>
+        <div className="text-center py-6 text-slate-400 text-[13px]">Sin elementos</div>
       )}
     </div>
   );
@@ -1502,12 +1487,12 @@ function TablaLentesSeguridad({
 
   const cols = ['1fr', '130px', '130px', '130px'].join(' ');
   return (
-    <div className="rounded-xl overflow-hidden border" style={{ borderColor: '#e2e8f0' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 390px', background: '#4a8fd4', color: '#fff', fontWeight: 700, fontSize: 13 }}>
+    <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700">
+      <div className="grid bg-blue-500 dark:bg-blue-600 text-white font-bold text-[13px]" style={{ gridTemplateColumns: '1fr 390px' }}>
         <div style={{ padding: '8px 12px' }}></div>
-        <div style={{ padding: '8px 12px', textAlign: 'center', borderLeft: '1px solid #6ba3dd' }}>TRATAMIENTO</div>
+        <div className="text-center border-l border-blue-400 dark:border-blue-500" style={{ padding: '8px 12px' }}>TRATAMIENTO</div>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: cols, background: '#6ba3dd', color: '#fff', fontWeight: 700, fontSize: 12 }}>
+      <div className="grid bg-blue-400 dark:bg-blue-500 text-white font-bold text-[12px]" style={{ gridTemplateColumns: cols }}>
         <div style={{ padding: '6px 12px' }}>LENTE</div>
         <div style={{ padding: '6px 8px', textAlign: 'center' }}>BAJAS</div>
         <div style={{ padding: '6px 8px', textAlign: 'center' }}>ALTAS</div>
@@ -1522,13 +1507,10 @@ function TablaLentesSeguridad({
         return (
           <div
             key={brand}
-            style={{
-              display: 'grid', gridTemplateColumns: cols,
-              background: filaActiva ? '#eff6ff' : idx % 2 === 0 ? '#ffffff' : '#f1f5f9',
-              borderTop: '1px solid #e2e8f0', alignItems: 'center', transition: 'background 0.15s',
-            }}
+            className={`grid border-t border-slate-200 dark:border-slate-700 items-center transition-colors ${filaActiva ? 'bg-blue-50 dark:bg-blue-900/30' : idx % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-slate-50 dark:bg-slate-800/50'}`}
+            style={{ gridTemplateColumns: cols }}
           >
-            <div style={{ padding: '6px 12px', fontSize: 13, color: '#1e293b', fontWeight: filaActiva ? 700 : 600 }}>{brand}</div>
+            <div className={`px-3 py-1.5 text-[13px] text-slate-800 dark:text-slate-200 ${filaActiva ? 'font-bold' : 'font-medium'}`}>{brand}</div>
             <div style={{ padding: '4px 8px' }}>
               <PrecioCelda producto={bajas ?? null} seleccionado={bajas ? enCarrito.has(bajas.id) : false} onToggle={onToggleUnico} grupo="lente-seguridad" brand={brand} tipo="bajas" categoryIdFallback={categoryIdFallback} onSaved={onSaved} />
             </div>
@@ -1543,7 +1525,7 @@ function TablaLentesSeguridad({
       })}
 
       {brandMap.size === 0 && (
-        <div style={{ textAlign: 'center', padding: '24px', color: '#94a3b8', fontSize: 13 }}>Sin lentes en catálogo</div>
+        <div className="text-center py-6 text-slate-400 text-[13px]">Sin lentes en catálogo</div>
       )}
     </div>
   );
@@ -1590,13 +1572,13 @@ function TablaPreciosArmazones({
 
   const cols = '1fr 150px 150px';
   return (
-    <div className="rounded-xl overflow-hidden border" style={{ borderColor: '#e2e8f0' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: cols, background: '#4a8fd4', color: '#fff', fontWeight: 700, fontSize: 13 }}>
+    <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700">
+      <div className="grid bg-blue-500 dark:bg-blue-600 text-white font-bold text-[13px]" style={{ gridTemplateColumns: cols }}>
         <div style={{ padding: '8px 12px' }}>MARCA</div>
         <div style={{ padding: '8px 12px', textAlign: 'center' }}>ARMAZÓN</div>
         <div style={{ padding: '8px 12px', textAlign: 'center' }}>HX AR</div>
       </div>
-      <div style={{ background: '#d6e8f7', textAlign: 'center', fontSize: 11, color: '#1e4d7b', padding: '4px 8px', lineHeight: 1.4, fontWeight: 500 }}>
+      <div className="bg-blue-100 dark:bg-blue-900/40 text-center text-[11px] text-blue-900 dark:text-blue-300 px-2 py-1 font-medium leading-relaxed">
         Lente con graduación baja, y antirreflejante. <strong>ESTUCHE, MICROFIBRA</strong>
       </div>
 
@@ -1606,19 +1588,16 @@ function TablaPreciosArmazones({
         return (
           <div
             key={brand}
-            style={{
-              display: 'grid', gridTemplateColumns: cols,
-              background: filaActiva ? '#eff6ff' : idx % 2 === 0 ? '#ffffff' : '#f1f5f9',
-              borderTop: '1px solid #e2e8f0', alignItems: 'center', transition: 'background 0.15s',
-            }}
+            className={`grid border-t border-slate-200 dark:border-slate-700 items-center transition-colors ${filaActiva ? 'bg-blue-50 dark:bg-blue-900/30' : idx % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-slate-50 dark:bg-slate-800/50'}`}
+            style={{ gridTemplateColumns: cols }}
           >
-            <div style={{ padding: '6px 12px', fontSize: 13, color: '#1e293b', fontWeight: filaActiva ? 700 : 500 }}>{brand}</div>
+            <div className={`px-3 py-1.5 text-[13px] text-slate-800 dark:text-slate-200 ${filaActiva ? 'font-bold' : 'font-medium'}`}>{brand}</div>
             <div style={{ padding: '4px 8px' }}>
               <PrecioCelda producto={armazon ?? null} seleccionado={armazon ? enCarrito.has(armazon.id) : false} onToggle={onToggleUnico} grupo="armazon" brand={brand} tipo="armazon" categoryIdFallback={categoryIdFallback} onSaved={onSaved} />
             </div>
             <div style={{ padding: '4px 8px' }}>
               {hxarNote && !hxar ? (
-                <span style={{ fontSize: 10, color: '#475569', fontStyle: 'italic', fontWeight: 600 }}>{hxarNote}</span>
+                <span className="text-[10px] text-slate-600 dark:text-slate-400 italic font-semibold">{hxarNote}</span>
               ) : (
                 <PrecioCelda producto={hxar ?? null} seleccionado={hxar ? enCarrito.has(hxar.id) : false} onToggle={onToggleUnico} grupo="armazon" brand={brand} tipo="hxar" categoryIdFallback={categoryIdFallback} onSaved={onSaved} />
               )}
@@ -1628,7 +1607,7 @@ function TablaPreciosArmazones({
       })}
 
       {brandMap.size === 0 && (
-        <div style={{ textAlign: 'center', padding: '24px', color: '#94a3b8', fontSize: 13 }}>Sin armazones en catálogo</div>
+        <div className="text-center py-6 text-slate-400 text-[13px]">Sin armazones en catálogo</div>
       )}
     </div>
   );

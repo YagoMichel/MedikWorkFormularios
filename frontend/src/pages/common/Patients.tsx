@@ -129,9 +129,14 @@ export default function Patients() {
                 <tr key={p.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-700/30 transition-colors group">
                   <td className="py-4 px-6">
                     <div className="flex items-center gap-4">
-                      <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#2560aa]/10 to-[#51abcd]/10 text-[#2560aa] dark:from-[#2560aa]/20 dark:to-[#51abcd]/20 dark:text-blue-400 flex items-center justify-center font-bold shadow-sm shrink-0">
-                        {p.fullName?.charAt(0).toUpperCase() || 'P'}
-                      </div>
+                      {p.photoUrl ? (
+                        <img src={p.photoUrl} alt={p.fullName}
+                          className="w-11 h-11 rounded-2xl object-cover shadow-sm shrink-0" />
+                      ) : (
+                        <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#2560aa]/10 to-[#51abcd]/10 text-[#2560aa] dark:from-[#2560aa]/20 dark:to-[#51abcd]/20 dark:text-blue-400 flex items-center justify-center font-bold shadow-sm shrink-0">
+                          {p.fullName?.charAt(0).toUpperCase() || 'P'}
+                        </div>
+                      )}
                       <span className="font-extrabold text-slate-800 dark:text-slate-200 text-sm">{p.fullName}</span>
                     </div>
                   </td>

@@ -17,7 +17,7 @@ router.use(authRequired, requireRole('ADMIN'));
 const schema = z.object({
   email: z.string().email(),
   fullName: z.string().min(1),
-  role: z.enum(['ADMIN', 'DOCTOR', 'VENDEDOR', 'PACIENTE']),
+  role: z.enum(['ADMIN', 'DOCTOR', 'AGENT', 'PACIENTE']),
   password: z.string().min(8).optional(),
   active: z.boolean().optional(),
 });
@@ -35,11 +35,16 @@ router.post('/', async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const { password, ...rest } = parsed.data;
   if (!password) return res.status(400).json({ error: 'Password required' });
-  const u = await prisma.user.create({
-    data: { ...rest, passwordHash: await bcrypt.hash(password, 12) },
-    select: { id: true, email: true, fullName: true, role: true, active: true },
-  });
-  res.status(201).json(u);
+  try {
+    const u = await prisma.user.create({
+      data: { ...rest, passwordHash: await bcrypt.hash(password, 12) },
+      select: { id: true, email: true, fullName: true, role: true, active: true },
+    });
+    res.status(201).json(u);
+  } catch (err: any) {
+    if (err.code === 'P2002') return res.status(409).json({ error: 'Ese correo ya está en uso' });
+    throw err;
+  }
 });
 
 router.put('/:id', async (req, res) => {
@@ -47,11 +52,17 @@ router.put('/:id', async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   const data: any = { ...parsed.data };
   if (data.password) { data.passwordHash = await bcrypt.hash(data.password, 12); delete data.password; }
-  const u = await prisma.user.update({
-    where: { id: req.params.id }, data,
-    select: { id: true, email: true, fullName: true, role: true, active: true },
-  });
-  res.json(u);
+  try {
+    const u = await prisma.user.update({
+      where: { id: req.params.id }, data,
+      select: { id: true, email: true, fullName: true, role: true, active: true },
+    });
+    res.json(u);
+  } catch (err: any) {
+    if (err.code === 'P2025') return res.status(404).json({ error: 'Usuario no encontrado' });
+    if (err.code === 'P2002') return res.status(409).json({ error: 'Ese correo ya está en uso' });
+    throw err;
+  }
 });
 
 router.delete('/:id', async (req, res) => {

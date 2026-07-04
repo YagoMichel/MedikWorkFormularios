@@ -7,10 +7,11 @@
 // =============================================================
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../services/api';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { useAuth } from '../../stores/auth';
 import { Calendar as CalendarIcon, Clock, CheckCircle } from 'lucide-react';
+import { socket } from '../../services/socket';
 
 const PRESET_COLORS = [
   '#3b82f6', '#8b5cf6', '#51abcd', '#f59e0b',
@@ -28,6 +29,23 @@ export default function Calendar() {
   const user = useAuth((s) => s.user);
   const qc = useQueryClient();
   const [selected, setSelected] = useState(() => { const d = new Date(); d.setHours(0,0,0,0); return d; });
+
+  useEffect(() => {
+    if (!socket.connected) socket.connect();
+    const handler = () => qc.invalidateQueries({ queryKey: ['doctor-calendar'] });
+    socket.on('appointments:updated', handler);
+    socket.on('newAppointment', handler);
+    socket.on('newBatch', handler);
+    socket.on('batch:updated', handler);
+    socket.on('batch:status_updated', handler);
+    return () => {
+      socket.off('appointments:updated', handler);
+      socket.off('newAppointment', handler);
+      socket.off('newBatch', handler);
+      socket.off('batch:updated', handler);
+      socket.off('batch:status_updated', handler);
+    };
+  }, [qc]);
   const [showForm, setShowForm] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<null | { id: string; name: string }>(null);
   const [selectedEventInfo, setSelectedEventInfo] = useState<any>(null);
@@ -318,7 +336,7 @@ export default function Calendar() {
                           
                           const isPending = !isBatch && !isCompleted;
                           
-                          const isSinEmpresa = isBatch && (a.company?.name === 'Sin Empresa' || a.batch?.company?.name === 'Sin Empresa');
+                          const isSinEmpresa = isBatch && (a.companyId === 'SIN_EMPRESA' || a.company?.name?.toLowerCase().includes('sin empresa') || a.batch?.company?.name?.toLowerCase().includes('sin empresa'));
                           const label = isSinEmpresa ? 'Individual' : isBatch ? 'Empresarial' : isCompleted ? 'Completada' : 'Pendiente';
                           
                           const bg = isCompleted ? '#f0fdf4' : (isBatch && !isSinEmpresa) ? 'rgba(81,171,205,0.1)' : 'rgba(37,96,170,0.05)';
@@ -405,7 +423,7 @@ export default function Calendar() {
         const hasPassed = eventEnd.getTime() < new Date().getTime();
         const isCompleted = a.status === 'ATENDIDA' || a.status === 'COMPLETADA' || a.status === 'CERRADO' || (hasPassed && a.status !== 'CANCELADA' && a.status !== 'CANCELADO' && a.status !== 'NO_ASISTIO');
         
-        const isSinEmpresa = isBatch && (a.company?.name === 'Sin Empresa' || a.batch?.company?.name === 'Sin Empresa');
+        const isSinEmpresa = isBatch && (a.companyId === 'SIN_EMPRESA' || a.company?.name?.toLowerCase().includes('sin empresa') || a.batch?.company?.name?.toLowerCase().includes('sin empresa'));
         const label = isSinEmpresa ? 'Individual' : isBatch ? 'Empresarial' : isCompleted ? 'Completada' : 'Pendiente';
         
         const border = isCompleted ? '#10b981' : (isBatch && !isSinEmpresa) ? '#51abcd' : '#2560aa';
