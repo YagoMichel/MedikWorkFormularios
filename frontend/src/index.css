@@ -21,6 +21,7 @@
   --warning: #f59e0b;
   --danger: #ef4444;
   --border-subtle: rgba(51, 117, 200, 0.12);
+  --pos-price: #2563eb;   /* precio POS: azul de la cabecera, legible sobre fondo claro */
 }
 
 .dark {
@@ -32,6 +33,7 @@
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
   --border-subtle: rgba(148, 163, 184, 0.1);
+  --pos-price: #93c5fd;   /* precio POS: azul claro, legible sobre fondo oscuro */
 }
 
 /* ── Layout semantic classes (light defaults) ───────────────────── */

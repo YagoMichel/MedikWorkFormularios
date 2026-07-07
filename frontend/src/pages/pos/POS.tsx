@@ -1282,7 +1282,7 @@ function PrecioCelda({
           border: seleccionado ? '2px solid #2563eb' : '2px solid transparent',
           cursor: 'pointer', transition: 'all 0.15s',
           background: seleccionado ? '#2563eb' : 'transparent',
-          color: seleccionado ? '#ffffff' : '#1e293b',
+          color: seleccionado ? '#ffffff' : 'var(--pos-price)',
           position: 'relative',
         }}
         title={seleccionado ? 'Clic para quitar' : 'Clic para agregar'}

@@ -2,8 +2,9 @@
 // ARCHIVO: src/components/PatientPhotoCapture.tsx
 // DESCRIPCION: Captura/subida de foto del paciente al inicio del formulario.
 //   Flujo: tomar o subir → validar (resolución, borrosidad, formato, tamaño)
-//          → quitar fondo LOCALMENTE (@imgly/background-removal, no sale del
-//          dispositivo) → confirmar → subir a /api/surveys/photo → guardar ruta.
+//          → optimizar LOCALMENTE (redimensionar + comprimir a JPEG, la imagen
+//          no sale del dispositivo hasta subirla) → confirmar →
+//          subir a /api/surveys/photo → guardar ruta.
 //   Reutiliza estilos existentes (--bg-card, material-symbols-rounded, .btn).
 // =============================================================
 
@@ -16,6 +17,8 @@ const MIN_DIM = 320;                    // px mínimos de ancho y alto
 const MAX_BYTES = 8 * 1024 * 1024;      // 8 MB
 const BLUR_THRESHOLD = 55;              // varianza de Laplaciano; menor = borroso
 const ALLOWED = ['image/jpeg', 'image/png', 'image/webp'];
+const MAX_OUTPUT_DIM = 1024;            // lado máximo de la imagen final (px)
+const JPEG_QUALITY = 0.85;              // compresión JPEG de salida (0-1)
 
 type Phase = 'idle' | 'camera' | 'review' | 'processing' | 'confirm';
 
@@ -76,18 +79,25 @@ async function validate(blob: Blob): Promise<{ errors: string[]; warnings: strin
   return { errors, warnings };
 }
 
-// Compone la imagen (con fondo transparente) sobre blanco → PNG limpio de ID
-function flattenOnWhite(blob: Blob): Promise<Blob> {
-  return loadImage(blob).then(img => new Promise<Blob>((resolve, reject) => {
-    const c = document.createElement('canvas');
-    c.width = img.naturalWidth; c.height = img.naturalHeight;
-    const ctx = c.getContext('2d')!;
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, c.width, c.height);
-    ctx.drawImage(img, 0, 0);
-    URL.revokeObjectURL(img.src);
-    c.toBlob(b => b ? resolve(b) : reject(new Error('toBlob falló')), 'image/png');
-  }));
+// Optimiza la imagen: redimensiona al lado máximo, aplana sobre blanco
+// (por si el origen es PNG/WEBP con transparencia) y comprime a JPEG.
+// Reduce mucho el peso sin degradar visiblemente una foto tipo ID.
+async function optimizeImage(blob: Blob): Promise<Blob> {
+  const img = await loadImage(blob);
+  const scale = Math.min(1, MAX_OUTPUT_DIM / Math.max(img.naturalWidth, img.naturalHeight));
+  const w = Math.round(img.naturalWidth * scale);
+  const h = Math.round(img.naturalHeight * scale);
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d')!;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(img, 0, 0, w, h);
+  URL.revokeObjectURL(img.src);
+  return new Promise<Blob>((resolve, reject) =>
+    c.toBlob(b => b ? resolve(b) : reject(new Error('toBlob falló')), 'image/jpeg', JPEG_QUALITY));
 }
 
 export default function PatientPhotoCapture({ value, onChange, allowUpload = true }: {
@@ -169,21 +179,19 @@ export default function PatientPhotoCapture({ value, onChange, allowUpload = tru
     setPhase('review');
   };
 
-  // Quita el fondo localmente (el modelo se descarga; la imagen NO sale del equipo)
-  const removeBg = async () => {
+  // Optimiza la imagen localmente (redimensiona + comprime); nada sale del equipo
+  const useThisPhoto = async () => {
     if (!rawBlob) return;
     setPhase('processing');
     try {
-      const { removeBackground } = await import('@imgly/background-removal');
-      const cut = await removeBackground(rawBlob);       // PNG con transparencia
-      const flat = await flattenOnWhite(cut);            // sobre fondo blanco
+      const optimized = await optimizeImage(rawBlob);
       if (finalUrl) URL.revokeObjectURL(finalUrl);
-      setFinalBlob(flat);
-      setFinalUrl(URL.createObjectURL(flat));
+      setFinalBlob(optimized);
+      setFinalUrl(URL.createObjectURL(optimized));
       setPhase('confirm');
     } catch (e) {
-      console.error('[bg-removal]', e);
-      toast.error('No se pudo quitar el fondo. Intenta de nuevo.');
+      console.error('[optimize]', e);
+      toast.error('No se pudo procesar la imagen. Intenta de nuevo.');
       setPhase('review');
     }
   };
@@ -194,7 +202,7 @@ export default function PatientPhotoCapture({ value, onChange, allowUpload = tru
     setUploading(true);
     try {
       const fd = new FormData();
-      fd.append('photo', finalBlob, 'paciente.png');
+      fd.append('photo', finalBlob, 'paciente.jpg');
       const { data } = await api.post('/surveys/photo', fd);
       onChange(data.url);
       reset();
@@ -286,8 +294,8 @@ export default function PatientPhotoCapture({ value, onChange, allowUpload = tru
             <button type="button" onClick={reset} className="btn btn-secondary flex items-center gap-1.5">
               <span className="material-symbols-rounded" style={{ fontSize: 18 }}>refresh</span> Repetir
             </button>
-            <button type="button" onClick={removeBg} className="btn btn-primary flex items-center gap-1.5">
-              <span className="material-symbols-rounded" style={{ fontSize: 18 }}>auto_fix_high</span> Quitar fondo
+            <button type="button" onClick={useThisPhoto} className="btn btn-primary flex items-center gap-1.5">
+              <span className="material-symbols-rounded" style={{ fontSize: 18 }}>check</span> Usar esta foto
             </button>
           </div>
         </div>
@@ -297,7 +305,7 @@ export default function PatientPhotoCapture({ value, onChange, allowUpload = tru
       {phase === 'processing' && (
         <div className="flex flex-col items-center gap-3 py-8">
           <span className="material-symbols-rounded animate-spin text-4xl" style={{ color: '#3375c8' }}>progress_activity</span>
-          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Quitando el fondo… (se procesa en este dispositivo)</p>
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Optimizando imagen… (se procesa en este dispositivo)</p>
         </div>
       )}
 
