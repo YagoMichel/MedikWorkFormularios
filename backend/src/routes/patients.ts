@@ -16,6 +16,7 @@ const patientSchema = z.object({
   address: z.string().optional().nullable(),
   nss: z.string().optional().nullable(),
   company: z.string().optional().nullable(),
+  companyProfileId: z.string().optional().nullable(),
   medicalNotes: z.string().optional().nullable(),
   photoUrl: z.string().optional().nullable(),
 });
@@ -59,6 +60,7 @@ router.get('/:id', async (req, res) => {
       appointments: { include: { doctor: { select: { fullName: true } } }, orderBy: { date: 'desc' } },
       prescriptions: { include: { doctor: { select: { fullName: true } } }, orderBy: { issuedAt: 'desc' } },
       sales: { orderBy: { createdAt: 'desc' } },
+      companyProfile: { include: { items: { orderBy: { order: 'asc' } } } },
     },
   });
   if (!p) return res.status(404).json({ error: 'No encontrado' });

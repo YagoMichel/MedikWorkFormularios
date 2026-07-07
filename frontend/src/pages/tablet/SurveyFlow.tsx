@@ -1311,7 +1311,7 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
         {formStep === 2 && <section className="card space-y-4">
           <SectionHeader icon="person" title="Datos personales" color={FORM_STEPS[1].color} />
 
-          <PatientPhotoCapture value={form.photoUrl} onChange={url => set('photoUrl', url)} />
+          <PatientPhotoCapture value={form.photoUrl} onChange={url => set('photoUrl', url)} allowUpload={false} />
 
           <Field label="Nombre completo *">
             <input className="input" required placeholder="Ej. Juan Pérez García"

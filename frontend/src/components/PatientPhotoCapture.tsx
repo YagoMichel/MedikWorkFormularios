@@ -90,9 +90,10 @@ function flattenOnWhite(blob: Blob): Promise<Blob> {
   }));
 }
 
-export default function PatientPhotoCapture({ value, onChange }: {
+export default function PatientPhotoCapture({ value, onChange, allowUpload = true }: {
   value: string;
   onChange: (url: string) => void;
+  allowUpload?: boolean;
 }) {
   const [phase, setPhase] = useState<Phase>('idle');
   const [rawBlob, setRawBlob] = useState<Blob | null>(null);
@@ -241,12 +242,14 @@ export default function PatientPhotoCapture({ value, onChange }: {
             <span className="material-symbols-rounded text-3xl" style={{ color: '#3375c8' }}>photo_camera</span>
             <span className="font-bold text-sm" style={{ color: 'var(--text-primary)' }}>Tomar foto</span>
           </button>
-          <button type="button" onClick={() => fileRef.current?.click()}
-            className="flex-1 flex flex-col items-center gap-2 p-6 rounded-2xl transition hover:shadow-lg cursor-pointer"
-            style={{ border: '2px solid var(--border-subtle)' }}>
-            <span className="material-symbols-rounded text-3xl" style={{ color: '#51abcd' }}>upload</span>
-            <span className="font-bold text-sm" style={{ color: 'var(--text-primary)' }}>Subir foto</span>
-          </button>
+          {allowUpload && (
+            <button type="button" onClick={() => fileRef.current?.click()}
+              className="flex-1 flex flex-col items-center gap-2 p-6 rounded-2xl transition hover:shadow-lg cursor-pointer"
+              style={{ border: '2px solid var(--border-subtle)' }}>
+              <span className="material-symbols-rounded text-3xl" style={{ color: '#51abcd' }}>upload</span>
+              <span className="font-bold text-sm" style={{ color: 'var(--text-primary)' }}>Subir foto</span>
+            </button>
+          )}
           <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" capture="user"
             onChange={onFile} className="hidden" />
         </div>

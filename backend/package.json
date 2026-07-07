@@ -13,6 +13,7 @@
     "seed:frames": "tsx prisma/seed-frames.ts",
     "seed:catalogo-pos": "tsx src/scripts/sync-lista-precios.ts",
     "seed:servicios": "tsx prisma/seed-servicios.ts",
+    "seed:perfiles": "tsx prisma/seed-perfiles.ts",
     "seed:sepomex": "tsx scripts/download-sepomex.ts",
     "agent:token": "tsx src/scripts/create-agent-token.ts"
   },
@@ -25,6 +26,7 @@
     "dotenv": "^16.4.5",
     "express": "^4.21.1",
     "express-async-errors": "^3.1.1",
+    "googleapis": "^144.0.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
     "pdf-lib": "^1.17.1",

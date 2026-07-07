@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, createContext, useContext } from 'react';
 import toast from 'react-hot-toast';
+import PatientPhotoCapture from './PatientPhotoCapture';
 
 // ── SEPOMEX loader ────────────────────────────────────────────────────
 type SepomexRow = { e: string; m: string; c: string[] };
@@ -663,9 +664,11 @@ interface Props {
   patientId: string;
   companies: { id: string; name: string }[];
   onSave: (payload: any) => Promise<void>;
+  photoUrl?: string | null;
+  onPhotoChange?: (url: string) => void;
 }
 
-export function SurveyEditorForm({ survey, patientId, companies, onSave }: Props) {
+export function SurveyEditorForm({ survey, patientId, companies, onSave, photoUrl, onPhotoChange }: Props) {
   const [form, setForm] = useState<typeof empty>(() => buildFormFromSurvey(survey));
   const [formStep, setFormStep] = useState(1);
   const [saving, setSaving] = useState(false);
@@ -836,6 +839,10 @@ export function SurveyEditorForm({ survey, patientId, companies, onSave }: Props
             {/* ── PASO 2: Datos personales ─────────────────────── */}
             {formStep === 2 && <section className="card space-y-4">
               <SectionHeader icon="person" title="Datos personales" color={FORM_STEPS[1].color} />
+
+              {onPhotoChange && (
+                <PatientPhotoCapture value={photoUrl || ''} onChange={onPhotoChange} allowUpload />
+              )}
 
               <Field label="Nombre completo *">
                 <input className="input" required placeholder="Ej. Juan Pérez García"

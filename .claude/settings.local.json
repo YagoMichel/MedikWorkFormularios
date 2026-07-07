@@ -42,7 +42,11 @@
       "PowerShell(Select-String -Path \"C:\\\\Users\\\\eddyg\\\\AppData\\\\Local\\\\Temp\\\\mediwork_analisis\\\\word\\\\document.xml\" -Pattern \"jornadas? empresariales?\" -AllMatches | ForEach-Object { $_.Matches } | Measure-Object | Select-Object Count)",
       "PowerShell(python \"C:\\\\Users\\\\eddyg\\\\AppData\\\\Local\\\\Temp\\\\arch_diagram.py\" 2>&1)",
       "Bash(git add *)",
-      "Bash(git fetch *)"
+      "Bash(git fetch *)",
+      "Bash(ls *.md)",
+      "Bash(ls .cursor)",
+      "Bash(ls .cursorrules)",
+      "Bash(ls .github/copilot-instructions.md)"
     ]
   }
 }

@@ -275,22 +275,59 @@ export async function buildSurveyPdfBlob(survey: any, patient: any): Promise<{ b
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
 
   let y = 10;
-  const logoW = 46, logoH = 12; // proporción real del logo completo (3038x793)
+
+  // ── Barra de título (mismo estilo azul que los encabezados de sección) con
+  // el logo compacto integrado en línea con el texto, sin ocupar su propia fila ──
+  const barH = 14;
+  doc.setFillColor(...TITLE_BG);
+  doc.rect(MARGIN, y, PAGE_W - MARGIN * 2, barH, 'F');
+
+  const logoH = 9, logoW = logoH * (3038 / 793); // proporción real del logo completo
   try {
-    const logoData = await loadImageDataUrl(logoCompleto, 600);
-    doc.addImage(logoData, 'PNG', MARGIN, y, logoW, logoH);
+    const logoData = await loadImageDataUrl(logoCompleto, 400);
+    doc.addImage(logoData, 'PNG', MARGIN + 3, y + (barH - logoH) / 2, logoW, logoH);
   } catch { /* si falla la carga del logo, se omite */ }
 
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(...TITLE_TEXT);
+  doc.text('HISTORIA CLÍNICA — CUESTIONARIO DEL PACIENTE', MARGIN + 3 + logoW + 4, y + barH / 2 + 1.5);
+
+  y += barH + 5;
+
+  // ── Foto del paciente a la izquierda, con sus datos fluyendo al lado ──
+  const PHOTO_W = 35, PHOTO_H = 42;
+  let hasPhoto = false;
+  if (patient?.photoUrl) {
+    try {
+      const photoData = await loadImageDataUrl(patient.photoUrl, 350);
+      doc.addImage(photoData, 'PNG', MARGIN, y, PHOTO_W, PHOTO_H);
+      doc.setDrawColor(203, 213, 225);
+      doc.setLineWidth(0.2);
+      doc.rect(MARGIN, y, PHOTO_W, PHOTO_H);
+      hasPhoto = true;
+    } catch { /* si falla la carga de la foto, se omite */ }
+  }
+
+  const textX = hasPhoto ? MARGIN + PHOTO_W + 6 : MARGIN;
+  let textY = y + 8;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.setTextColor(15, 23, 42);
+  doc.text(cleanText(s.nombre || patient?.fullName), textX, textY);
+
+  const fecha = s.createdAt ? new Date(s.createdAt).toLocaleDateString('es-MX') : '—';
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(100, 116, 139);
-  doc.text('Historia Clínica — Cuestionario del paciente', MARGIN, y + logoH + 5);
+  textY += 7;
+  doc.text(`Fecha del cuestionario: ${fecha}`, textX, textY);
+  if (s.empresa) {
+    textY += 6;
+    doc.text(`Empresa: ${cleanText(s.empresa)}`, textX, textY);
+  }
 
-  doc.setFontSize(8);
-  const fecha = s.createdAt ? new Date(s.createdAt).toLocaleDateString('es-MX') : '—';
-  doc.text(`Fecha del cuestionario: ${fecha}`, PAGE_W - MARGIN, y + 4, { align: 'right' });
-
-  y += logoH + 9;
+  y = (hasPhoto ? y + PHOTO_H : textY + 4) + 6;
   doc.setDrawColor(51, 117, 200);
   doc.setLineWidth(0.6);
   doc.line(MARGIN, y, PAGE_W - MARGIN, y);

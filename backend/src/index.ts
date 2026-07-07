@@ -24,6 +24,7 @@ import sales        from './routes/sales';
 import dashboard    from './routes/dashboard';
 import users        from './routes/users';
 import companies    from './routes/companies';
+import companyProfiles from './routes/companyProfiles';
 import agent        from './routes/agent';
 import batches      from './routes/batches';
 import surveys      from './routes/surveys';
@@ -202,6 +203,7 @@ app.use('/api/sales',        sales);         // Ventas
 app.use('/api/dashboard',    dashboard);     // Stats del dashboard
 app.use('/api/users',        users);         // Gestion de usuarios
 app.use('/api/companies',    companies);     // Empresas clientes
+app.use('/api/company-profiles', companyProfiles); // Perfiles/checklist de estudios por empresa
 app.use('/api/batches',      batches);       // Citas de empresa
 
 // -- Bot externo (WhatsApp u otro canal, desarrollado por 3er ingeniero) --

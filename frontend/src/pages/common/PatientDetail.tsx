@@ -4,7 +4,7 @@ import { api } from '../../services/api';
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../stores/auth';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Eye, ArrowDown, HeartPulse, Droplet, FlaskConical, Baby, Stethoscope, Activity, Bone, FileDown, CheckCircle2, AlertCircle, FileStack, ChevronDown, ChevronRight, Trash2 } from 'lucide-react';
+import { ArrowLeft, Eye, ArrowDown, HeartPulse, Droplet, FlaskConical, Baby, Stethoscope, Activity, Bone, FileDown, CheckCircle2, AlertCircle, FileStack, ChevronDown, ChevronRight, Trash2, Plus, FileText, CloudUpload } from 'lucide-react';
 import { SurveyEditorForm } from '../../components/SurveyEditorForm';
 import { buildSurveyPdfBlob } from '../../utils/surveyPdf';
 import { buildExamPdfBlob } from '../../utils/examPdf';
@@ -70,12 +70,12 @@ export default function PatientDetail() {
       </div>
 
       {tab === 'survey' && (
-        <SurveyTab patientId={p.id} survey={survey} />
+        <SurveyTab patientId={p.id} survey={survey} patient={p} />
       )}
 
       {tab === 'documentos' && <DocumentosTab survey={survey} patient={p} />}
 
-      {tab === 'results' && <MedicalExamTab patientId={p.id} />}
+      {tab === 'results' && <MedicalExamTab patientId={p.id} patient={p} />}
 
       {tab === 'clinical' && <HistorialClinicoTab patient={p} />}
 
@@ -98,8 +98,14 @@ export default function PatientDetail() {
 }
 
 // ── Medical Exam Tab ────────────────────────────────────────────────
-function MedicalExamTab({ patientId }: { patientId: string }) {
+const esDeHoy = (fecha: string) => {
+  const d = new Date(fecha); const hoy = new Date();
+  return d.getFullYear() === hoy.getFullYear() && d.getMonth() === hoy.getMonth() && d.getDate() === hoy.getDate();
+};
+
+function MedicalExamTab({ patientId, patient }: { patientId: string; patient: any }) {
   const qc = useQueryClient();
+  const [mostrarNuevo, setMostrarNuevo] = useState(false);
   const { data: exams = [], isLoading } = useQuery({
     queryKey: ['medical-exams', patientId],
     queryFn: async () => (await api.get('/medical-exams', { params: { patientId } })).data,
@@ -107,19 +113,75 @@ function MedicalExamTab({ patientId }: { patientId: string }) {
 
   if (isLoading) return <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Cargando...</p>;
 
-  const latest = exams[0] as any | undefined;
+  // Ya viene ordenado por fecha descendente desde el backend
+  const examHoy = (exams as any[]).find((e) => esDeHoy(e.createdAt));
+  const examAnterior = (exams as any[]).find((e) => !esDeHoy(e.createdAt));
 
+  // Se edita en el mismo registro si ya existe uno de hoy (para poder corregir
+  // un dato sin duplicar); si el más reciente es de otro día, guardar crea uno
+  // nuevo — así cada consulta queda con su propio examen en el historial.
   const save = async (data: any) => {
-    if (latest?.id) {
-      await api.put(`/medical-exams/${latest.id}`, data);
+    if (examHoy?.id) {
+      await api.put(`/medical-exams/${examHoy.id}`, data);
     } else {
       await api.post('/medical-exams', { patientId, ...data });
     }
     await qc.invalidateQueries({ queryKey: ['medical-exams', patientId] });
     toast.success('Resultados guardados');
+    setMostrarNuevo(false);
   };
 
-  return <MedicalExamForm initial={latest} onSave={save} />;
+  // La doctora necesita ver TODO lo que se hizo la vez pasada (cuestionario +
+  // resultados + consentimiento juntos), no solo los campos del examen —
+  // reusa el mismo PDF combinado que ya existe para esa fecha.
+  const verExpedienteAnterior = async () => {
+    if (!examAnterior) return;
+    try {
+      const fecha = examAnterior.createdAt.slice(0, 10);
+      const res = await api.get(`/documents/${patientId}/completo`, { params: { date: fecha }, responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url; a.download = `Expediente_${fecha}_${(patient?.fullName || 'paciente').replace(/\s+/g, '_')}.pdf`; a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error('No se pudo generar el expediente de esa consulta');
+    }
+  };
+
+  if (examHoy) {
+    return <MedicalExamForm key={examHoy.id} initial={examHoy} onSave={save} />;
+  }
+
+  if (mostrarNuevo) {
+    return <MedicalExamForm key="nuevo" onSave={save} />;
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="card flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/40">
+        <div>
+          <div className="font-semibold text-sm">
+            {examAnterior ? 'Última consulta' : 'Este paciente todavía no tiene consultas registradas'}
+          </div>
+          {examAnterior && (
+            <div className="text-xs text-slate-500">
+              {new Date(examAnterior.createdAt).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}
+            </div>
+          )}
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          {examAnterior && (
+            <button onClick={verExpedienteAnterior} className="btn btn-secondary text-sm flex items-center gap-2 whitespace-nowrap">
+              <FileStack size={16} /> Ver expediente completo
+            </button>
+          )}
+          <button onClick={() => setMostrarNuevo(true)} className="btn btn-primary text-sm whitespace-nowrap">
+            Iniciar {examAnterior ? 'consulta' : 'examen'} de hoy
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 const EMPTY_AV = { sinLentes: '', conLentes: '', recuperacion: '' };
@@ -536,20 +598,29 @@ function MedicalExamForm({ initial, onSave }: { initial?: any; onSave: (d: any) 
 }
 
 // ── Survey Tab ──────────────────────────────────────────────────────
-function SurveyTab({ patientId, survey }: { patientId: string; survey: any }) {
+function SurveyTab({ patientId, survey, patient }: { patientId: string; survey: any; patient: any }) {
   const qc = useQueryClient();
   const { data: companies = [] } = useQuery({
     queryKey: ['companies'],
     queryFn: async () => (await api.get('/companies')).data,
   });
 
+  // Si la última encuesta es de otro día, guardar crea una nueva (nueva
+  // consulta) en vez de sobreescribir la de la visita anterior.
   const handleSave = async (payload: any) => {
-    if (survey?.id) {
+    if (survey?.id && esDeHoy(survey.createdAt)) {
       await api.put(`/surveys/${survey.id}`, payload);
     } else {
       await api.post('/surveys', payload);
     }
     await qc.invalidateQueries({ queryKey: ['survey', patientId] });
+  };
+
+  // La foto se guarda directo en el paciente (no en la encuesta), para que
+  // no dependa de guardar el resto del formulario
+  const handlePhotoChange = async (url: string) => {
+    await api.put(`/patients/${patientId}`, { photoUrl: url });
+    await qc.invalidateQueries({ queryKey: ['patient', patientId] });
   };
 
   return (
@@ -558,6 +629,8 @@ function SurveyTab({ patientId, survey }: { patientId: string; survey: any }) {
       patientId={patientId}
       companies={companies}
       onSave={handleSave}
+      photoUrl={patient?.photoUrl}
+      onPhotoChange={handlePhotoChange}
     />
   );
 }
@@ -570,10 +643,30 @@ const DOC_OBLIGATORIOS = [
   { type: 'CONSENTIMIENTO', label: 'Hoja de consentimiento' },
 ];
 
+// Nombre estándar de archivo: ETIQUETA_NOMBREPACIENTE, sin espacios ni acentos
+// (los acentos en el nombre del archivo rompen la subida multipart) — así se
+// puede encontrar fácil en OneDrive/Drive sin importar qué nombre traiga el
+// archivo original (foto de cámara, escaneo, exportación de Excel/Word, etc).
+const slug = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').trim().replace(/\s+/g, '_');
+const nombreEstandar = (etiqueta: string, patientName: string, originalFilename: string) => {
+  const puntoExt = originalFilename.lastIndexOf('.');
+  const ext = puntoExt >= 0 ? originalFilename.slice(puntoExt) : '';
+  return `${slug(etiqueta)}_${slug(patientName || 'paciente')}${ext}`;
+};
+
+// Tipos de archivo aceptados en las subidas del expediente — incluye Excel y
+// Word, ya que algunos estudios (laboratorios, etc.) llegan en esos formatos
+const ACCEPT_ARCHIVOS = 'image/*,.pdf,.xls,.xlsx,.doc,.docx';
+
 function DocumentosTab({ survey, patient }: { survey: any; patient: any }) {
   const qc = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const otroFileRef = useRef<HTMLInputElement>(null);
+  const perfilFileRef = useRef<HTMLInputElement>(null);
   const [generando, setGenerando] = useState<string | null>(null);
+  const [etiquetaOtro, setEtiquetaOtro] = useState('');
+  const [subiendoOtro, setSubiendoOtro] = useState(false);
+  const [itemPendiente, setItemPendiente] = useState<any>(null);
 
   const { data: docs = [] } = useQuery({
     queryKey: ['documents', patient.id],
@@ -586,6 +679,36 @@ function DocumentosTab({ survey, patient }: { survey: any; patient: any }) {
   });
   const ultimoExamen = exams[0];
 
+  // El checklist de estudios de hoy se marca "completo" consultando en vivo
+  // la carpeta del paciente en la nube (Drive/OneDrive) para la fecha de hoy
+  // — no la base de datos local — así también refleja archivos que alguien
+  // haya subido directo a la carpeta, por fuera de esta app.
+  const hoyISO = new Date().toISOString().slice(0, 10);
+  const { data: cloudHoy } = useQuery({
+    queryKey: ['documents-cloud-files', patient.id, hoyISO],
+    queryFn: async () => (await api.get(`/documents/${patient.id}/cloud-files`, { params: { date: hoyISO } })).data,
+    refetchInterval: 15000,
+  });
+  const archivosCloudHoy: any[] = cloudHoy?.configured ? cloudHoy.files : [];
+
+  // Todos los perfiles (checklist de estudios) de todas las empresas — el
+  // médico elige aquí directo cuál aplica, sin depender de lo que diga el
+  // campo "Empresa" de la encuesta (que puede no coincidir exactamente).
+  const { data: todosLosPerfiles = [] } = useQuery({
+    queryKey: ['company-profiles-all'],
+    queryFn: async () => (await api.get('/company-profiles')).data,
+  });
+  const perfilesPorEmpresa = todosLosPerfiles.reduce((acc: Record<string, any[]>, p: any) => {
+    const key = p.company?.name || 'Sin empresa';
+    (acc[key] ||= []).push(p);
+    return acc;
+  }, {});
+
+  const handleProfileChange = async (profileId: string) => {
+    await api.put(`/patients/${patient.id}`, { companyProfileId: profileId || null });
+    await qc.invalidateQueries({ queryKey: ['patient', patient.id] });
+  };
+
   const ultimoDe = (type: string) =>
     [...docs].filter((d: any) => d.type === type)
       .sort((a: any, b: any) => new Date(b.visitDate).getTime() - new Date(a.visitDate).getTime())[0];
@@ -597,6 +720,67 @@ function DocumentosTab({ survey, patient }: { survey: any; patient: any }) {
     form.append('type', type);
     await api.post('/documents/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } });
     qc.invalidateQueries({ queryKey: ['documents', patient.id] });
+    qc.invalidateQueries({ queryKey: ['documents-cloud-files', patient.id] });
+  };
+
+  // Checklist de estudios del perfil de empresa asignado al paciente (ver
+  // selector de "Perfil" arriba) — se muestran todos los estudios, incluyendo
+  // Historia clínica y Optometría.
+  const itemsPerfil = patient.companyProfile?.items || [];
+
+  // Un item con "detail" (ej. LABORATORIO: "- Biometria Hematica | - Perfil de
+  // lipidos | ...") se desglosa en una tarjeta por cada análisis específico,
+  // en vez de una sola tarjeta genérica que se marca completa con cualquier
+  // archivo. Título = el estudio (ej. "Laboratorio"), subtítulo = el análisis.
+  const tarjetasEstudios = itemsPerfil.flatMap((item: any) => {
+    const subestudios = (item.detail || '')
+      .split('|')
+      .map((s: string) => s.trim().replace(/^-+\s*/, ''))
+      .filter(Boolean);
+
+    if (subestudios.length === 0) {
+      return [{ id: item.id, titulo: item.label, subtitulo: null, matchLabel: item.label }];
+    }
+    return subestudios.map((sub: string, i: number) => ({
+      id: `${item.id}-${i}`,
+      titulo: item.label,
+      subtitulo: sub,
+      matchLabel: `${item.label} ${sub}`,
+    }));
+  });
+
+  // El nombre del archivo ya guardado está "slugificado" (espacios → guion
+  // bajo, sin acentos); hay que normalizar el matchLabel exactamente igual
+  // antes de comparar, si no la comparación falla en cualquier estudio con
+  // más de una palabra (antes solo "coincidía" en los de una sola palabra).
+  //
+  // La fuente de verdad es la carpeta en la nube de hoy (archivosCloudHoy),
+  // no la base de datos local: si hay nube configurada, "ya está subido"
+  // significa "ya está en esa carpeta", sin importar si el registro local
+  // se creó o no. Solo si no hay nube configurada se usa la BD local.
+  const ultimoDeEstudio = (matchLabel: string) => {
+    const norm = (s: string) => slug(s).toLowerCase();
+    if (cloudHoy?.configured) {
+      const enNube = archivosCloudHoy.find((f: any) => norm(f.name).startsWith(norm(matchLabel)));
+      if (!enNube) return undefined;
+      return { visitDate: enNube.modifiedAt || new Date().toISOString(), fileName: enNube.name, cloudWebUrl: enNube.webUrl };
+    }
+    return [...docs]
+      .filter((d: any) => d.type === 'OTRO' && norm(d.fileName).startsWith(norm(matchLabel)))
+      .sort((a: any, b: any) => new Date(b.visitDate).getTime() - new Date(a.visitDate).getTime())[0];
+  };
+
+  const handleEstudioFile = async (tarjeta: any, file: File) => {
+    setGenerando(tarjeta.id);
+    try {
+      const nombreArchivo = nombreEstandar(tarjeta.matchLabel, patient.fullName, file.name);
+      await subirArchivo('OTRO', file, nombreArchivo);
+      toast.success(`${tarjeta.titulo}${tarjeta.subtitulo ? ' — ' + tarjeta.subtitulo : ''} guardado en el expediente`);
+    } catch {
+      toast.error('No se pudo subir el documento');
+    } finally {
+      setGenerando(null);
+    }
   };
 
   const handleCuestionario = async () => {
@@ -636,7 +820,8 @@ function DocumentosTab({ survey, patient }: { survey: any; patient: any }) {
   const handleConsentimiento = async (file: File) => {
     setGenerando('CONSENTIMIENTO');
     try {
-      await subirArchivo('CONSENTIMIENTO', file, file.name);
+      const nombreArchivo = nombreEstandar('Consentimiento', patient.fullName, file.name);
+      await subirArchivo('CONSENTIMIENTO', file, nombreArchivo);
       toast.success('Hoja de consentimiento guardada');
     } catch {
       toast.error('No se pudo subir el archivo');
@@ -645,20 +830,99 @@ function DocumentosTab({ survey, patient }: { survey: any; patient: any }) {
     }
   };
 
+  // Documentos manuales sueltos (rayos X, prueba de Ruffier, laboratorios, etc.)
+  // — mismo endpoint de siempre, solo que la "etiqueta" que escribe el usuario
+  // se manda como nombre del archivo para que se vea claro en el expediente.
+  //
+  // La lista que se muestra es la carpeta real de hoy en la nube (no la BD
+  // local): así refleja también archivos subidos directo a Drive/OneDrive
+  // por fuera de la app, y borrar de aquí borra el archivo real en la nube.
+  // Sin nube configurada, se usa la BD local como respaldo (modo legado).
+  const archivosHoyParaLista = archivosCloudHoy
+    .filter((f: any) => !f.name.toLowerCase().startsWith('expediente_completo'))
+    .sort((a: any, b: any) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime());
+  const otros = [...docs]
+    .filter((d: any) => d.type === 'OTRO')
+    .sort((a: any, b: any) => new Date(b.visitDate).getTime() - new Date(a.visitDate).getTime());
+
+  const handleOtroFile = async (file: File) => {
+    if (!etiquetaOtro.trim()) {
+      toast.error('Escribe primero qué tipo de documento es (ej. Rayos X, Prueba de Ruffier)');
+      return;
+    }
+    setSubiendoOtro(true);
+    try {
+      const nombreArchivo = nombreEstandar(etiquetaOtro, patient.fullName, file.name);
+      await subirArchivo('OTRO', file, nombreArchivo);
+      toast.success('Documento agregado al expediente');
+      setEtiquetaOtro('');
+    } catch {
+      toast.error('No se pudo subir el documento');
+    } finally {
+      setSubiendoOtro(false);
+    }
+  };
+
+  const borrarOtro = async (doc: any) => {
+    if (!window.confirm(`¿Borrar "${doc.fileName}"? Esta acción no se puede deshacer.`)) return;
+    try {
+      await api.delete(`/documents/${doc.id}`);
+      await qc.invalidateQueries({ queryKey: ['documents', patient.id] });
+      toast.success('Documento borrado');
+    } catch {
+      toast.error('No se pudo borrar el documento');
+    }
+  };
+
+  // Borra un archivo directo de la carpeta en la nube (lista de "Archivos de
+  // hoy") — funciona aunque el archivo no tenga un registro Document local,
+  // ej. si alguien lo subió directo a Drive/OneDrive por fuera de la app.
+  const borrarArchivoCloud = async (file: any) => {
+    if (!window.confirm(`¿Borrar "${file.name}" de la nube? Esta acción no se puede deshacer.`)) return;
+    try {
+      await api.delete(`/documents/cloud-file/${file.id}`);
+      await qc.invalidateQueries({ queryKey: ['documents-cloud-files', patient.id] });
+      await qc.invalidateQueries({ queryKey: ['documents', patient.id] });
+      toast.success('Archivo borrado de la nube');
+    } catch {
+      toast.error('No se pudo borrar el archivo de la nube');
+    }
+  };
+
   const handleCompleto = async () => {
     try {
-      const res = await api.get(`/documents/${patient.id}/completo`, { responseType: 'blob' });
+      // force=1: siempre rearma el PDF con lo que haya en la carpeta de hoy
+      // en este momento y guarda esa copia nueva en la nube (sobrescribe la
+      // anterior) — a diferencia de "Ver expediente completo" en otras
+      // partes, que consulta la copia ya guardada en vez de reconstruirla.
+      const res = await api.get(`/documents/${patient.id}/completo`, {
+        params: { date: hoyISO, force: 1 },
+        responseType: 'blob',
+      });
       const url = URL.createObjectURL(res.data);
       const a = document.createElement('a');
-      a.href = url; a.download = `Expediente_completo_${patient.fullName.replace(/\s+/g, '_')}.pdf`; a.click();
+      a.href = url; a.download = `Expediente_${hoyISO}_${patient.fullName.replace(/\s+/g, '_')}.pdf`; a.click();
       URL.revokeObjectURL(url);
+      qc.invalidateQueries({ queryKey: ['documents-cloud-files', patient.id] });
     } catch {
-      toast.error('Este paciente todavía no tiene documentos para combinar');
+      toast.error('Este paciente todavía no tiene documentos de hoy para combinar');
     }
   };
 
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-end">
+        <select className="input w-auto max-w-xs text-sm" value={patient.companyProfileId || ''}
+          onChange={e => handleProfileChange(e.target.value)}>
+          <option value="">Sin perfil asignado</option>
+          {Object.entries(perfilesPorEmpresa).map(([empresa, perfiles]: [string, any]) => (
+            <optgroup key={empresa} label={empresa}>
+              {perfiles.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </optgroup>
+          ))}
+        </select>
+      </div>
+
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {DOC_OBLIGATORIOS.map(({ type, label }) => {
           const ultimo = ultimoDe(type);
@@ -701,12 +965,104 @@ function DocumentosTab({ survey, patient }: { survey: any; patient: any }) {
         })}
       </div>
 
-      <input ref={fileInputRef} type="file" accept="image/*,.pdf" className="hidden"
+      <input ref={fileInputRef} type="file" accept={ACCEPT_ARCHIVOS} className="hidden"
         onChange={(e) => { if (e.target.files?.[0]) handleConsentimiento(e.target.files[0]); e.target.value = ''; }} />
 
-      {docs.length > 0 && (
+      {/* Checklist de estudios requeridos según el perfil de empresa asignado —
+          una tarjeta por cada análisis específico, no una genérica por estudio */}
+      {patient.companyProfile && tarjetasEstudios.length > 0 && (
+        <div className="space-y-2">
+          <h4 className="font-semibold text-sm">Estudios requeridos — {patient.companyProfile.name}</h4>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {tarjetasEstudios.map((tarjeta: any) => {
+              const ultimo = ultimoDeEstudio(tarjeta.matchLabel);
+              const enProgreso = generando === tarjeta.id;
+              return (
+                <div key={tarjeta.id}
+                  className="relative card flex flex-col items-center gap-2 p-6 text-center cursor-pointer hover:shadow-md transition"
+                  onClick={() => { if (enProgreso) return; setItemPendiente(tarjeta); perfilFileRef.current?.click(); }}>
+                  <span className="absolute top-2 right-2">
+                    {ultimo
+                      ? <CheckCircle2 size={16} className="text-emerald-500" />
+                      : <AlertCircle size={16} className="text-orange-500" />}
+                  </span>
+                  <FileDown size={32} className={ultimo ? 'text-blue-600' : 'text-slate-300'} />
+                  <div className="font-semibold text-sm">{tarjeta.titulo}</div>
+                  {tarjeta.subtitulo && <div className="text-xs text-slate-500">{tarjeta.subtitulo}</div>}
+                  <div className="text-xs text-slate-400">
+                    {enProgreso
+                      ? 'Subiendo…'
+                      : ultimo
+                        ? `Última: ${new Date(ultimo.visitDate).toLocaleDateString('es-MX')}`
+                        : 'Falta — subir archivo'}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <input ref={perfilFileRef} type="file" accept={ACCEPT_ARCHIVOS} className="hidden"
+            onChange={(e) => { if (e.target.files?.[0] && itemPendiente) handleEstudioFile(itemPendiente, e.target.files[0]); e.target.value = ''; }} />
+        </div>
+      )}
+
+      {/* Documentos manuales sueltos: rayos X, prueba de Ruffier, laboratorios, etc. */}
+      <div className="card space-y-3">
+        <h4 className="font-semibold text-sm">Otros documentos</h4>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input className="input flex-1" placeholder="Ej. Rayos X, Prueba de Ruffier, Laboratorios..."
+            value={etiquetaOtro} onChange={(e) => setEtiquetaOtro(e.target.value)} />
+          <button type="button" disabled={subiendoOtro || !etiquetaOtro.trim()}
+            onClick={() => otroFileRef.current?.click()}
+            className="btn btn-secondary text-sm flex items-center gap-2 whitespace-nowrap disabled:opacity-50">
+            <Plus size={16} /> {subiendoOtro ? 'Subiendo…' : 'Agregar documento'}
+          </button>
+          <input ref={otroFileRef} type="file" accept={ACCEPT_ARCHIVOS} className="hidden"
+            onChange={(e) => { if (e.target.files?.[0]) handleOtroFile(e.target.files[0]); e.target.value = ''; }} />
+        </div>
+
+        {/* Con nube configurada, la lista es la carpeta real de hoy en Drive/
+            OneDrive — incluye archivos subidos directo ahí, y borrar aquí
+            borra el archivo real en la nube. Sin nube, respaldo con la BD local. */}
+        {cloudHoy?.configured ? (
+          archivosHoyParaLista.length > 0 && (
+            <div className="space-y-1 pt-2 border-t border-slate-100 dark:border-slate-700">
+              <div className="text-xs text-slate-400">Archivos de hoy en la nube</div>
+              {archivosHoyParaLista.map((f: any) => (
+                <div key={f.id} className="flex items-center justify-between text-sm p-2 rounded hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <a href={f.webUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 min-w-0">
+                    <FileText size={14} className="text-blue-500 shrink-0" />
+                    <span className="truncate">{f.name}</span>
+                  </a>
+                  <button onClick={() => borrarArchivoCloud(f)} title="Borrar este archivo de la nube" className="text-slate-400 hover:text-red-500 transition shrink-0">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )
+        ) : (
+          otros.length > 0 && (
+            <div className="space-y-1 pt-2 border-t border-slate-100 dark:border-slate-700">
+              {otros.map((d: any) => (
+                <div key={d.id} className="flex items-center justify-between text-sm p-2 rounded hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <a href={d.cloudWebUrl || d.fileUrl} {...(d.cloudWebUrl ? { target: '_blank', rel: 'noreferrer' } : { download: d.fileName })} className="flex items-center gap-2 min-w-0">
+                    <FileText size={14} className="text-blue-500 shrink-0" />
+                    <span className="truncate">{d.fileName}</span>
+                    <span className="text-slate-400 text-xs shrink-0">— {new Date(d.visitDate).toLocaleDateString('es-MX')}</span>
+                  </a>
+                  <button onClick={() => borrarOtro(d)} title="Borrar este documento" className="text-slate-400 hover:text-red-500 transition shrink-0">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )
+        )}
+      </div>
+
+      {(cloudHoy?.configured ? archivosCloudHoy.length > 0 : docs.length > 0) && (
         <button onClick={handleCompleto} className="btn btn-primary text-sm flex items-center gap-2">
-          <FileStack size={16} /> Ver expediente completo (PDF)
+          <FileStack size={16} /> Generar expediente del día (PDF)
         </button>
       )}
     </div>
@@ -753,6 +1109,15 @@ function agruparPorFecha(docs: any[]) {
 function HistorialPorFecha({ patient, docs }: { patient: any; docs: any[] }) {
   const qc = useQueryClient();
   const [abierto, setAbierto] = useState<string | null>(null);
+
+  // Carpeta de esa fecha en OneDrive/Google Drive, en vivo — incluye archivos
+  // subidos directo ahí, no solo los que pasaron por esta app. Solo se pide
+  // cuando el día está expandido.
+  const { data: nube } = useQuery({
+    queryKey: ['documents-cloud', patient.id, abierto],
+    queryFn: async () => (await api.get(`/documents/${patient.id}/cloud-files`, { params: { date: abierto } })).data,
+    enabled: !!abierto,
+  });
 
   const borrarDocumento = async (doc: any) => {
     const label = DOC_OBLIGATORIOS.find((o) => o.type === doc.type)?.label || 'documento';
@@ -820,10 +1185,15 @@ function HistorialPorFecha({ patient, docs }: { patient: any; docs: any[] }) {
                         .sort((a: any, b: any) => (ORDEN_TIPOS[a.type] ?? 9) - (ORDEN_TIPOS[b.type] ?? 9))
                         .map((d: any) => (
                           <div key={d.id} className="flex items-center justify-between text-sm p-2 rounded hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                            <a href={d.fileUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 min-w-0">
+                            <a href={d.cloudWebUrl || d.fileUrl} {...(d.cloudWebUrl ? { target: '_blank', rel: 'noreferrer' } : d.type === 'OTRO' ? { download: d.fileName } : { target: '_blank', rel: 'noreferrer' })} className="flex items-center gap-2 min-w-0">
                               <FileDown size={14} className="text-blue-500 shrink-0" />
                               {DOC_OBLIGATORIOS.find((o) => o.type === d.type)?.label || 'Otro documento'}
                               <span className="text-slate-400 text-xs truncate">— {d.fileName}</span>
+                              {d.cloudWebUrl && (
+                                <span title="Sincronizado con la nube" className="shrink-0">
+                                  <CloudUpload size={13} className="text-emerald-500" />
+                                </span>
+                              )}
                             </a>
                             <div className="flex items-center gap-3 shrink-0">
                               <span className="text-xs text-slate-400">{d.uploadedBy?.fullName || ''}</span>
@@ -836,6 +1206,27 @@ function HistorialPorFecha({ patient, docs }: { patient: any; docs: any[] }) {
                       <button onClick={() => descargarCompleto(fecha)} className="btn btn-primary text-xs flex items-center gap-2 mt-2">
                         <FileStack size={14} /> Ver expediente completo de este día
                       </button>
+
+                      {/* Carpeta de esta fecha en OneDrive/Google Drive, en vivo — la
+                          misma carpeta Mes_Año/Día/Paciente que se usa a mano */}
+                      {nube?.configured && (
+                        <div className="pt-3 mt-1 border-t border-slate-100 dark:border-slate-700">
+                          <h5 className="text-xs font-bold uppercase tracking-wide text-slate-400 mb-2">Carpeta en la nube</h5>
+                          {nube.files.length === 0 ? (
+                            <p className="text-xs text-slate-400">Todavía no hay archivos en la carpeta de esta fecha.</p>
+                          ) : (
+                            <div className="space-y-1">
+                              {nube.files.map((f: any) => (
+                                <a key={f.id} href={f.webUrl} target="_blank" rel="noreferrer"
+                                  className="flex items-center gap-2 text-sm p-2 rounded hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                                  <FileText size={14} className="text-blue-500 shrink-0" />
+                                  <span className="truncate">{f.name}</span>
+                                </a>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
