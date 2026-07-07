@@ -12,10 +12,9 @@
 //   ONEDRIVE_CLIENT_SECRET — Client secret
 //   ONEDRIVE_DRIVE_USER    — correo del dueño del OneDrive a usar
 //
-// NOTA: la subida usa "simple upload" (PUT .../content), que Graph limita a
-// 4 MB. Si algún día se necesitan archivos más grandes hay que cambiar a una
-// upload session (PUT .../createUploadSession) — no implementado todavía
-// porque no hace falta para fotos/PDFs típicos del expediente.
+// NOTA: Graph limita el "simple upload" (PUT .../content) a 4 MB. Los
+// archivos más grandes que eso se suben con una upload session (createUploadSession
+// + PUT por partes de 10 MB) — ver uploadLarge() abajo.
 // =============================================================
 
 import type { CloudFile, CloudStorageProvider } from './types';
@@ -64,11 +63,60 @@ function toCloudFile(item: any): CloudFile {
   };
 }
 
+// Límite real de Graph para "simple upload" (PUT .../content). Por encima de
+// esto hay que usar una upload session con el archivo partido en pedazos.
+const SIMPLE_UPLOAD_MAX = 4 * 1024 * 1024; // 4 MB
+// Graph exige que cada pedazo sea múltiplo de 320 KiB (excepto el último);
+// 10 MB = 32 × 320 KiB, cumple exacto.
+const CHUNK_SIZE = 10 * 1024 * 1024; // 10 MB
+
+// Sube un archivo grande (> SIMPLE_UPLOAD_MAX) por partes: primero se abre
+// una "upload session" (URL temporal, ya autorizada — no lleva el header
+// Authorization) y luego se manda el archivo en pedazos de CHUNK_SIZE con el
+// header Content-Range. El último pedazo devuelve el archivo ya creado.
+async function uploadLarge(fullPath: string, buffer: Buffer): Promise<CloudFile> {
+  const token = await getAccessToken();
+  const sessionRes = await fetch(`${driveBaseUrl()}/root:/${fullPath}:/createUploadSession`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ item: { '@microsoft.graph.conflictBehavior': 'replace' } }),
+  });
+  if (!sessionRes.ok) throw new Error(`No se pudo iniciar la subida grande a OneDrive (${sessionRes.status}: ${await sessionRes.text()})`);
+  const { uploadUrl } = await sessionRes.json() as { uploadUrl: string };
+
+  const total = buffer.length;
+  let start = 0;
+  let completed: any = null;
+  while (start < total) {
+    const end = Math.min(start + CHUNK_SIZE, total);
+    const chunk = buffer.subarray(start, end);
+    const res = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        'Content-Length': String(chunk.length),
+        'Content-Range': `bytes ${start}-${end - 1}/${total}`,
+      },
+      body: new Uint8Array(chunk),
+    });
+    if (!res.ok && res.status !== 202) {
+      throw new Error(`No se pudo subir el archivo grande a OneDrive (${res.status}: ${await res.text()})`);
+    }
+    if (res.status !== 202) completed = await res.json(); // 200/201 solo en el último pedazo
+    start = end;
+  }
+  return toCloudFile(completed);
+}
+
 export const oneDriveProvider: CloudStorageProvider = {
   async uploadFile(folderPath, filename, buffer, mimeType) {
-    const token = await getAccessToken();
     // Graph crea automáticamente las carpetas intermedias que no existan.
     const fullPath = encodePath([...folderPath, filename]);
+
+    if (buffer.length > SIMPLE_UPLOAD_MAX) {
+      return uploadLarge(fullPath, buffer);
+    }
+
+    const token = await getAccessToken();
     const res = await fetch(`${driveBaseUrl()}/root:/${fullPath}:/content`, {
       method: 'PUT',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': mimeType },
