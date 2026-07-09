@@ -6,6 +6,20 @@
 // =============================================================
 
 import 'dotenv/config';
+import dns from 'dns';
+// La red de Docker Desktop expone rutas IPv6 que no son alcanzables desde el
+// contenedor (ENETUNREACH) hacia hosts que sí resuelven AAAA, como
+// login.microsoftonline.com — sin esto, las llamadas a Microsoft Graph
+// (sincronización OneDrive) fallan aunque la IPv4 funcione perfecto.
+// `dns.setDefaultResultOrder('ipv4first')` no es suficiente en este entorno
+// (Alpine/musl sigue devolviendo AAAA primero), así que se fuerza `family: 4`
+// directo en dns.lookup, del que dependen net/tls/undici por debajo.
+const originalLookup = dns.lookup;
+// @ts-ignore — dns.lookup tiene varias sobrecargas; solo nos interesa forzar family: 4
+dns.lookup = (hostname: string, options: any, callback?: any) => {
+  if (typeof options === 'function') { callback = options; options = {}; }
+  return originalLookup(hostname, { ...options, family: 4 }, callback);
+};
 import 'express-async-errors'; // hace que los errores de handlers async lleguen al middleware de error de abajo, en vez de tumbar el proceso
 import express from 'express';
 import { prisma } from './prisma';

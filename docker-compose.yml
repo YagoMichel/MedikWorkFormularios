@@ -29,7 +29,7 @@ services:
     environment:
       DATABASE_URL: postgresql://mediwork:mediwork@db:5432/mediwork?schema=public
       JWT_SECRET: ${JWT_SECRET:-change-me-in-prod}
-      # ANTHROPIC_API_KEY y GOOGLE_API_KEY vienen del env_file
+      # GOOGLE_API_KEY viene del env_file
       PORT: 4000
       UPLOAD_DIR: /app/uploads
       DEFAULT_DAILY_CAPACITY: ${DEFAULT_DAILY_CAPACITY:-20}

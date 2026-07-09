@@ -38,7 +38,6 @@ Edita `backend/.env` y completa los valores marcados:
 | Variable | Descripción |
 |---|---|
 | `JWT_SECRET` | Cualquier string largo y aleatorio |
-| `ANTHROPIC_API_KEY` | API key de Anthropic (para el agente IA) |
 | `GOOGLE_API_KEY` | API key de Google (opcional) |
 | `WHATSAPP_ACCESS_TOKEN` | Token de WhatsApp Business (opcional) |
 

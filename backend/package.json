@@ -10,6 +10,7 @@
     "prisma:migrate": "prisma migrate deploy",
     "prisma:push": "prisma db push",
     "seed": "tsx prisma/seed.ts",
+    "seed:master": "tsx prisma/seed-master.ts",
     "seed:frames": "tsx prisma/seed-frames.ts",
     "seed:catalogo-pos": "tsx src/scripts/sync-lista-precios.ts",
     "seed:servicios": "tsx prisma/seed-servicios.ts",
@@ -18,7 +19,6 @@
     "agent:token": "tsx src/scripts/create-agent-token.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.30.1",
     "@google/generative-ai": "^0.24.1",
     "@prisma/client": "^5.22.0",
     "bcrypt": "^5.1.1",

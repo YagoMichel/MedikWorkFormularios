@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { api } from '../../services/api';
 import toast from 'react-hot-toast';
-import { Camera, Loader2 } from 'lucide-react';
 
 interface Props { patientId: string; onClose: () => void; onSaved: () => void; }
 
@@ -14,45 +13,15 @@ const empty = {
 
 export default function PrescriptionForm({ patientId, onClose, onSaved }: Props) {
   const [form, setForm] = useState<any>(empty);
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [scanning, setScanning] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [scanMessage, setScanMessage] = useState<string | null>(null);
 
   const set = (k: string, v: string) => setForm({ ...form, [k]: v });
-
-  const onScan = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setScanning(true);
-    setScanMessage('Procesando imagen con IA...');
-    try {
-      const fd = new FormData();
-      fd.append('image', file);
-      const { data } = await api.post('/prescriptions/ocr', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-      const ex = data.extracted || {};
-      setImageUrl(data.imageUrl);
-      const merged: any = { ...empty };
-      Object.keys(empty).forEach((k) => {
-        if (ex[k] !== undefined && ex[k] !== null) merged[k] = String(ex[k]);
-      });
-      if (ex.diagnosis) merged.diagnosis = ex.diagnosis;
-      setForm({ ...form, ...merged });
-      setScanMessage(ex._note || 'Revisa los valores extraídos antes de guardar');
-      toast.success('Imagen procesada');
-    } catch (err) {
-      toast.error('No se pudo procesar la imagen');
-      setScanMessage(null);
-    } finally {
-      setScanning(false);
-    }
-  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     try {
-      const body: any = { patientId, type: form.type, diagnosis: form.diagnosis || null, recommendations: form.recommendations || null, imageUrl };
+      const body: any = { patientId, type: form.type, diagnosis: form.diagnosis || null, recommendations: form.recommendations || null };
       ['odSph', 'odCyl', 'odAxis', 'odAdd', 'oiSph', 'oiCyl', 'oiAxis', 'oiAdd', 'dpOd', 'dpOi', 'dpBin'].forEach((k) => {
         if (form[k] !== '' && form[k] !== null && form[k] !== undefined) body[k] = parseFloat(form[k]);
       });
@@ -70,14 +39,6 @@ export default function PrescriptionForm({ patientId, onClose, onSaved }: Props)
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 overflow-auto">
       <div className="bg-white rounded-xl p-6 w-full max-w-2xl my-8">
         <h2 className="text-lg font-bold mb-4">Nueva Receta Visual</h2>
-
-        <div className="mb-4 p-3 border-2 border-dashed border-blue-300 rounded-lg bg-blue-50">
-          <label className="cursor-pointer flex items-center justify-center gap-2 text-sm text-blue-700 font-medium">
-            {scanning ? <><Loader2 className="animate-spin" size={18} /> Procesando...</> : <><Camera size={18} /> Escanear receta con IA (OCR)</>}
-            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={onScan} disabled={scanning} />
-          </label>
-          {scanMessage && <p className="text-xs text-center mt-2 text-blue-700">{scanMessage}</p>}
-        </div>
 
         <form className="space-y-3" onSubmit={submit}>
           <div className="grid grid-cols-5 gap-2 text-xs font-medium text-slate-600">

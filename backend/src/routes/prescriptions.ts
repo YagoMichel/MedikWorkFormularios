@@ -1,19 +1,11 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import multer from 'multer';
-import fs from 'fs';
-import path from 'path';
 import { prisma } from '../prisma';
 import { authRequired, requireRole, AuthRequest } from '../middleware/auth';
 import { emit } from '../socket';
-import { extractPrescriptionFromImage } from '../services/ocr.service';
 
 const router = Router();
 router.use(authRequired);
-
-const UPLOAD_DIR = process.env.UPLOAD_DIR || '/app/uploads';
-if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const schema = z.object({
   patientId: z.string(),
@@ -75,17 +67,6 @@ router.delete('/:id', requireRole('DOCTOR', 'ADMIN'), async (req, res) => {
   await prisma.prescription.delete({ where: { id: req.params.id } });
   emit('prescription:deleted', { id: req.params.id });
   res.json({ ok: true });
-});
-
-// OCR endpoint
-router.post('/ocr', requireRole('DOCTOR', 'ADMIN'), upload.single('image'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No image' });
-  const filename = `rx_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${req.file.mimetype.split('/')[1] || 'jpg'}`;
-  const filepath = path.join(UPLOAD_DIR, filename);
-  fs.writeFileSync(filepath, req.file.buffer);
-  const base64 = req.file.buffer.toString('base64');
-  const extracted = await extractPrescriptionFromImage(base64, req.file.mimetype);
-  res.json({ extracted, imageUrl: `/uploads/${filename}` });
 });
 
 export default router;

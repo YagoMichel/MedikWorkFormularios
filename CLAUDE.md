@@ -23,7 +23,7 @@ docker compose up           # subsequent runs
 ```bash
 # Backend (http://localhost:4000)
 cd backend
-cp .env.example .env        # set JWT_SECRET; ANTHROPIC_API_KEY powers prescription OCR (optional, simulated if unset)
+cp .env.example .env        # set JWT_SECRET
 npm install
 npx prisma db push
 npm run dev
@@ -112,10 +112,6 @@ Middleware pattern:
 router.get('/', authRequired, requireRole('ADMIN', 'DOCTOR'), handler);
 ```
 
-### Prescription OCR
-
-`POST /api/prescriptions/ocr` (in `routes/prescriptions.ts`) uploads a photo of a handwritten/printed optical prescription and uses `services/ocr.service.ts` to extract the OD/OI sphere/cylinder/axis/add values as structured JSON. This is the one place `ANTHROPIC_API_KEY` is actually used (Claude vision, model `claude-sonnet-4-20250514`) — without it configured, the service returns hardcoded simulated values (`_simulated: true`) instead of failing, so the feature degrades gracefully in dev. `GOOGLE_API_KEY` / `@google/generative-ai` remain unused everywhere.
-
 ### Document storage: local disk vs. cloud sync (Drive/OneDrive)
 
 `backend/src/routes/documents.ts` manages the patient's "expediente documental" (survey PDF, exam-results PDF, signed consent, and free-form uploads like lab results/X-rays). Storage behavior is controlled by `CLOUD_STORAGE_PROVIDER` (`none` default, `google`, or `onedrive`), resolved once per request via `services/storage/getCloudStorageProvider()`:
@@ -144,7 +140,7 @@ Key behaviors in `documents.ts`:
 
 Key endpoints: company lookup with fuzzy/Levenshtein matching (`/companies/find`), company registration, day-capacity queries, one-shot appointment booking (`/agendar`), and `CompanyBatch` creation/confirmation/cancellation for corporate exam days.
 
-`@anthropic-ai/sdk` is a real dependency (used for prescription OCR, see above), but `@google/generative-ai` and the `Conversation`/`ConversationMessage` Prisma models are leftover from an earlier design — not referenced anywhere in `backend/src`. `_agent-files/` at the repo root is a **delivered, not-integrated** proposal for routing WhatsApp through a self-hosted n8n workflow instead of the external bot; it duplicates `backend/`, `docker-compose.yml`, and `nginx.conf` with n8n-specific changes and is not part of the running stack (the root `docker-compose.yml` has no n8n service).
+`@google/generative-ai` and the `Conversation`/`ConversationMessage` Prisma models are leftover from an earlier design — not referenced anywhere in `backend/src`. `_agent-files/` at the repo root is a **delivered, not-integrated** proposal for routing WhatsApp through a self-hosted n8n workflow instead of the external bot; it duplicates `backend/`, `docker-compose.yml`, and `nginx.conf` with n8n-specific changes and is not part of the running stack (the root `docker-compose.yml` has no n8n service).
 
 Socket.IO events (e.g., `batch:created`) are emitted when `/api/agent` handlers create records, so the frontend dashboard updates in real time without polling.
 
@@ -179,7 +175,6 @@ Copy `backend/.env.example` to `backend/.env` and fill in:
 | `DEFAULT_DAILY_CAPACITY` | No | Fallback daily patient capacity when no `DayCapacity` row exists (default 20) |
 | `CLINIC_NAME`, `CLINIC_ADDRESS`, `CLINIC_PHONE`, `CLINIC_HOURS_WEEKDAY`, `CLINIC_HOURS_SATURDAY` | No | Returned by `GET /api/agent/info` for the external bot/site |
 | `SELF_URL` | No | This service's own URL |
-| `ANTHROPIC_API_KEY` | No | Used by `services/ocr.service.ts` for prescription OCR (`POST /api/prescriptions/ocr`); without it, that endpoint returns simulated values instead of failing |
 | `GOOGLE_API_KEY` | No | Unused by current backend code; kept from an earlier design (see agent integration notes above) |
 | `CLOUD_STORAGE_PROVIDER` | No | `none` (default) \| `google` \| `onedrive` — enables cloud sync for the document expediente, see "Document storage" above |
 | `GOOGLE_DRIVE_CLIENT_ID`, `GOOGLE_DRIVE_CLIENT_SECRET`, `GOOGLE_DRIVE_REFRESH_TOKEN`, `GOOGLE_DRIVE_ROOT_FOLDER_ID` | If `CLOUD_STORAGE_PROVIDER=google` | OAuth2 acting as the Drive account owner (not a service account — those have no storage quota and can't write to a personal Drive folder); refresh token obtained once via the OAuth Playground |
