@@ -134,7 +134,7 @@ export default function DoctorDashboard() {
           <div>
             <div className="text-sm text-slate-500 font-semibold mb-1">Consultas hoy</div>
             <div className="text-3xl font-extrabold text-slate-800 dark:text-white">
-              {data.stats.total} <span className="text-lg font-medium text-slate-400">/ 25</span>
+              {data.stats.total} <span className="text-lg font-medium text-slate-400">/ 20</span>
             </div>
           </div>
         </div>

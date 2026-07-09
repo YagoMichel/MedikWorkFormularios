@@ -20,7 +20,7 @@ const ALLOWED = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_OUTPUT_DIM = 1024;            // lado máximo de la imagen final (px)
 const JPEG_QUALITY = 0.85;              // compresión JPEG de salida (0-1)
 
-type Phase = 'idle' | 'camera' | 'review' | 'processing' | 'confirm';
+type Phase = 'idle' | 'camera' | 'processing' | 'confirm';
 
 // Carga una imagen desde un blob en un HTMLImageElement
 function loadImage(blob: Blob): Promise<HTMLImageElement> {
@@ -106,8 +106,6 @@ export default function PatientPhotoCapture({ value, onChange, allowUpload = tru
   allowUpload?: boolean;
 }) {
   const [phase, setPhase] = useState<Phase>('idle');
-  const [rawBlob, setRawBlob] = useState<Blob | null>(null);
-  const [rawUrl, setRawUrl] = useState<string>('');
   const [finalUrl, setFinalUrl] = useState<string>('');
   const [finalBlob, setFinalBlob] = useState<Blob | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -125,9 +123,8 @@ export default function PatientPhotoCapture({ value, onChange, allowUpload = tru
 
   const reset = () => {
     stopCamera();
-    if (rawUrl) URL.revokeObjectURL(rawUrl);
     if (finalUrl) URL.revokeObjectURL(finalUrl);
-    setRawBlob(null); setRawUrl(''); setFinalUrl(''); setFinalBlob(null);
+    setFinalUrl(''); setFinalBlob(null);
     setWarnings([]); setPhase('idle');
   };
 
@@ -168,31 +165,23 @@ export default function PatientPhotoCapture({ value, onChange, allowUpload = tru
     e.target.value = '';
   };
 
-  // Punto común: valida y pasa a revisión
+  // Punto común: valida, optimiza (redimensiona + comprime, nada sale del
+  // equipo) y pasa directo al único paso de confirmación.
   const intake = async (blob: Blob) => {
     const { errors, warnings } = await validate(blob);
     if (errors.length) { toast.error(errors[0]); setPhase('idle'); return; }
-    if (rawUrl) URL.revokeObjectURL(rawUrl);
-    setRawBlob(blob);
-    setRawUrl(URL.createObjectURL(blob));
-    setWarnings(warnings);
-    setPhase('review');
-  };
-
-  // Optimiza la imagen localmente (redimensiona + comprime); nada sale del equipo
-  const useThisPhoto = async () => {
-    if (!rawBlob) return;
     setPhase('processing');
     try {
-      const optimized = await optimizeImage(rawBlob);
+      const optimized = await optimizeImage(blob);
       if (finalUrl) URL.revokeObjectURL(finalUrl);
       setFinalBlob(optimized);
       setFinalUrl(URL.createObjectURL(optimized));
+      setWarnings(warnings);
       setPhase('confirm');
     } catch (e) {
       console.error('[optimize]', e);
       toast.error('No se pudo procesar la imagen. Intenta de nuevo.');
-      setPhase('review');
+      setPhase('idle');
     }
   };
 
@@ -280,27 +269,6 @@ export default function PatientPhotoCapture({ value, onChange, allowUpload = tru
         </div>
       )}
 
-      {/* Paso: revisar foto cruda */}
-      {phase === 'review' && (
-        <div className="space-y-3">
-          <img src={rawUrl} alt="Vista previa" className="mx-auto rounded-2xl object-cover"
-            style={{ maxWidth: 360, width: '100%', aspectRatio: '1 / 1' }} />
-          {warnings.map((w, i) => (
-            <p key={i} className="text-sm flex items-center gap-1.5 justify-center" style={{ color: '#d97706' }}>
-              <span className="material-symbols-rounded" style={{ fontSize: 16 }}>warning</span> {w}
-            </p>
-          ))}
-          <div className="flex gap-3 justify-center">
-            <button type="button" onClick={reset} className="btn btn-secondary flex items-center gap-1.5">
-              <span className="material-symbols-rounded" style={{ fontSize: 18 }}>refresh</span> Repetir
-            </button>
-            <button type="button" onClick={useThisPhoto} className="btn btn-primary flex items-center gap-1.5">
-              <span className="material-symbols-rounded" style={{ fontSize: 18 }}>check</span> Usar esta foto
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Paso: procesando */}
       {phase === 'processing' && (
         <div className="flex flex-col items-center gap-3 py-8">
@@ -314,6 +282,11 @@ export default function PatientPhotoCapture({ value, onChange, allowUpload = tru
         <div className="space-y-3">
           <img src={finalUrl} alt="Foto final" className="mx-auto rounded-2xl object-cover border"
             style={{ maxWidth: 360, width: '100%', aspectRatio: '1 / 1', background: '#fff', borderColor: 'var(--border-subtle)' }} />
+          {warnings.map((w, i) => (
+            <p key={i} className="text-sm flex items-center gap-1.5 justify-center" style={{ color: '#d97706' }}>
+              <span className="material-symbols-rounded" style={{ fontSize: 16 }}>warning</span> {w}
+            </p>
+          ))}
           <div className="flex gap-3 justify-center">
             <button type="button" onClick={reset} disabled={uploading} className="btn btn-secondary flex items-center gap-1.5">
               <span className="material-symbols-rounded" style={{ fontSize: 18 }}>refresh</span> Repetir
