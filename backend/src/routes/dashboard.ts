@@ -175,8 +175,10 @@ router.get('/reportes', requireRole('ADMIN'), async (_req, res) => {
   const totalTrabajadoresAnio = citasMes.reduce((sum: number, c: any) => sum + c.trabajadores, 0);
 
   const ROLE_LABELS: Record<string, string> = { ADMIN: 'Admin', DOCTOR: 'Doctor', PACIENTE: 'Paciente', AGENT: 'Agente' };
+  // AGENT es cuenta de servicio y MASTER es un rol privado: ninguno debe
+  // aparecer en la gráfica de usuarios por rol.
   const usuariosPastel = usuariosPorRol
-    .filter((u: any) => u.role !== 'AGENT')
+    .filter((u: any) => u.role !== 'AGENT' && u.role !== 'MASTER')
     .map((u: any) => ({ name: ROLE_LABELS[u.role] || u.role, value: u._count }));
 
   res.json({

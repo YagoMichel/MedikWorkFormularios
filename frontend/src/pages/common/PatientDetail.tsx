@@ -2,7 +2,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../services/api';
 import { useState, useEffect, useRef } from 'react';
-import { useAuth } from '../../stores/auth';
+import { useAuth, isAdminRole } from '../../stores/auth';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Eye, ArrowDown, HeartPulse, Droplet, FlaskConical, Baby, Stethoscope, Activity, Bone, FileDown, CheckCircle2, AlertCircle, FileStack, ChevronDown, ChevronRight, Trash2, Plus, FileText, CloudUpload } from 'lucide-react';
 import { SurveyEditorForm } from '../../components/SurveyEditorForm';
@@ -34,7 +34,7 @@ export default function PatientDetail() {
     { k: 'documentos', l: 'Documentos' },
     { k: 'clinical', l: 'Historial clínico' },
   ];
-  if (user?.role === 'ADMIN') tabs.push({ k: 'sales', l: 'Compras' });
+  if (isAdminRole(user?.role)) tabs.push({ k: 'sales', l: 'Compras' });
 
   return (
     <div className="space-y-4">

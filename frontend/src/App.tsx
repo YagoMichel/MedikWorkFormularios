@@ -14,7 +14,7 @@
 // =============================================================
 
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { useAuth } from './stores/auth';
+import { useAuth, isAdminRole } from './stores/auth';
 
 // -- Layouts (estructura visual con sidebar) --
 import MainLayout   from './components/layout/MainLayout';
@@ -35,6 +35,9 @@ import AdminCompanies      from './pages/admin/Companies';
 import AdminBatchesManager from './pages/admin/BatchesManager';
 import AdminCalendarView   from './pages/admin/CalendarView';
 import AdminReports        from './pages/admin/Reports';
+
+// -- Paginas MASTER (exclusivas, no visibles para ADMIN) --
+import MasterSystemStatus  from './pages/master/SystemStatus';
 
 // -- Paginas DOCTOR (tuyas) --
 import DoctorDashboard     from './pages/doctor/Dashboard';
@@ -63,8 +66,8 @@ export default function App() {
     );
   }
 
-  // ---- ADMIN (compañero) ----
-  if (user.role === 'ADMIN') {
+  // ---- ADMIN / MASTER (compañero) ----
+  if (isAdminRole(user.role)) {
     return (
       <Routes>
         <Route element={<MainLayout />}>
@@ -78,6 +81,9 @@ export default function App() {
           <Route path="/citas"       element={<AdminBatchesManager />} />
           <Route path="/calendario"  element={<AdminCalendarView />} />
           <Route path="/reportes"    element={<AdminReports />} />
+          {user.role === 'MASTER' && (
+            <Route path="/system-status" element={<MasterSystemStatus />} />
+          )}
           {/* Compartidas con doctor */}
           <Route path="/profile"     element={<Profile />} />
           <Route path="/patients"    element={<Patients />} />

@@ -12,9 +12,10 @@ const Icon = ({ name }: { name: string }) => (
 
 interface BottomNavProps {
   isAdmin: boolean;
+  isMaster?: boolean;
 }
 
-export default function BottomNav({ isAdmin }: BottomNavProps) {
+export default function BottomNav({ isAdmin, isMaster }: BottomNavProps) {
   const [open, setOpen] = useState(false);
   const { logout } = useAuth();
   const nav = useNavigate();
@@ -36,6 +37,7 @@ export default function BottomNav({ isAdmin }: BottomNavProps) {
     { to: '/inventory',  icon: 'inventory_2', label: 'Inventario' },
     { to: '/calendario', icon: 'date_range',  label: 'Calendario' },
     { to: '/reportes',   icon: 'bar_chart',   label: 'Reportes'   },
+    ...(isMaster ? [{ to: '/system-status', icon: 'monitor_heart', label: 'Estado del sistema' }] : []),
   ];
 
   const fixed = isAdmin ? fixedAdmin : fixedDoctor;

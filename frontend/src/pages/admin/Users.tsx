@@ -2,13 +2,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../services/api';
 import { useState, useMemo } from 'react';
 import toast from 'react-hot-toast';
-import { 
-  Pencil, Trash2, Users as UsersIcon, UserCheck, UserX, Shield, 
+import {
+  Pencil, Trash2, Users as UsersIcon, UserCheck, UserX, Shield, Crown,
   Search, Filter, ArrowUpDown, Calendar, Tablet, User, Plus
 } from 'lucide-react';
+import { useAuth } from '../../stores/auth';
 
 export default function Users() {
   const qc = useQueryClient();
+  const currentUser = useAuth((s) => s.user);
+  const isMaster = currentUser?.role === 'MASTER';
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [confirmDelete, setConfirmDelete] = useState<null | { id: string; name: string }>(null);
@@ -79,6 +82,11 @@ export default function Users() {
     if (role === 'DOCTOR') return (
       <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
         <User size={14} strokeWidth={2.5} /> Doctor
+      </div>
+    );
+    if (role === 'MASTER') return (
+      <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 text-xs font-bold">
+        <Crown size={14} strokeWidth={2.5} /> Master
       </div>
     );
     return (
@@ -264,8 +272,8 @@ export default function Users() {
         </div>
       </div>
 
-      {open && <UserForm onClose={() => setOpen(false)} onSubmit={(d: any) => create.mutate(d)} />}
-      {editing && <UserForm initial={editing} onClose={() => setEditing(null)} onSubmit={(d: any) => update.mutate({ id: editing.id, ...d })} />}
+      {open && <UserForm isMaster={isMaster} onClose={() => setOpen(false)} onSubmit={(d: any) => create.mutate(d)} />}
+      {editing && <UserForm isMaster={isMaster} initial={editing} onClose={() => setEditing(null)} onSubmit={(d: any) => update.mutate({ id: editing.id, ...d })} />}
 
       {confirmDelete && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
@@ -283,7 +291,7 @@ export default function Users() {
   );
 }
 
-function UserForm({ onClose, onSubmit, initial }: any) {
+function UserForm({ onClose, onSubmit, initial, isMaster }: any) {
   const isEdit = !!initial;
   const [f, setF] = useState({
     email: initial?.email || '',
@@ -337,6 +345,7 @@ function UserForm({ onClose, onSubmit, initial }: any) {
               <option value="ADMIN">Admin</option>
               <option value="DOCTOR">Doctor</option>
               <option value="PACIENTE">Tablet</option>
+              {isMaster && <option value="MASTER">Master</option>}
             </select>
           </div>
           

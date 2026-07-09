@@ -8,7 +8,7 @@
 // =============================================================
 
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../../stores/auth';
+import { useAuth, isAdminRole } from '../../stores/auth';
 import { useTheme } from '../../stores/theme.tsx';
 import logo from '../../assets/logo.png';
 import BottomNav from './BottomNav';
@@ -33,7 +33,8 @@ export default function MainLayout() {
   const loc = useLocation();
   const { dark, toggle } = useTheme();
   const qc = useQueryClient();
-  const isAdmin = user?.role === 'ADMIN';
+  const isAdmin = isAdminRole(user?.role);
+  const isMaster = user?.role === 'MASTER';
   const isDoctor = user?.role === 'DOCTOR';
 
   const { data: appts = [] } = useQuery({
@@ -304,6 +305,7 @@ export default function MainLayout() {
     { to: '/citas',     icon: 'calendar_month', label: 'Citas'      },
     { to: '/calendario',icon: 'date_range',     label: 'Calendario' },
     { to: '/reportes',  icon: 'bar_chart',      label: 'Reportes'   },
+    ...(isMaster ? [{ to: '/system-status', icon: 'monitor_heart', label: 'Estado del sistema' }] : []),
   ] : [
     { to: '/',             icon: 'dashboard', label: 'Dashboard' },
     { to: '/appointments', icon: 'event',     label: 'Agenda'    },
@@ -314,7 +316,8 @@ export default function MainLayout() {
     '/': 'Dashboard', '/patients': 'Pacientes', '/sales': 'Ventas', '/pos': 'Punto de venta',
     '/appointments': 'Agenda', '/inventory': 'Inventario',
     '/movements': 'Movimientos', '/users': 'Usuarios', '/prescriptions': 'Recetas',
-    '/citas': 'Citas', '/calendario': 'Calendario', '/reportes': 'Reportes', '/companies': 'Empresas'
+    '/citas': 'Citas', '/calendario': 'Calendario', '/reportes': 'Reportes', '/companies': 'Empresas',
+    '/system-status': 'Estado del sistema',
   };
   const title = titleMap[loc.pathname] || (loc.pathname.startsWith('/patients/') ? 'Ficha de paciente' : 'Mediwork');
 
@@ -455,7 +458,7 @@ export default function MainLayout() {
       </div>
 
       {/* Barra inferior flotante (solo visible en móvil vía CSS) */}
-      <BottomNav isAdmin={isAdmin} />
+      <BottomNav isAdmin={isAdmin} isMaster={isMaster} />
     </div>
   );
 }

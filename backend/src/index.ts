@@ -30,6 +30,7 @@ import batches      from './routes/batches';
 import surveys      from './routes/surveys';
 import medicalExams from './routes/medicalExams';
 import documents    from './routes/documents';
+import system       from './routes/system';
 
 const app = express();
 
@@ -205,6 +206,7 @@ app.use('/api/users',        users);         // Gestion de usuarios
 app.use('/api/companies',    companies);     // Empresas clientes
 app.use('/api/company-profiles', companyProfiles); // Perfiles/checklist de estudios por empresa
 app.use('/api/batches',      batches);       // Citas de empresa
+app.use('/api/system',       system);        // Panel de estado (exclusivo MASTER)
 
 // -- Bot externo (WhatsApp u otro canal, desarrollado por 3er ingeniero) --
 // Auth: JWT con role AGENT — generar con: npm run agent:token

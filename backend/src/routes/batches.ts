@@ -16,7 +16,7 @@
 
 import { Router } from 'express';
 import { prisma } from '../prisma';
-import { authRequired, requireRole, AuthRequest } from '../middleware/auth';
+import { authRequired, requireRole, isAdminLike, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 router.use(authRequired);
@@ -95,7 +95,7 @@ router.put('/:id', async (req: AuthRequest, res) => {
   const { id } = req.params;
   const { status, date, expectedCount, notes, companyId } = req.body;
 
-  if (req.user!.role !== 'ADMIN') {
+  if (!isAdminLike(req.user!.role)) {
     const soloCierre = status === 'CERRADO' && date === undefined && expectedCount === undefined
       && notes === undefined && companyId === undefined;
     if (!soloCierre) {

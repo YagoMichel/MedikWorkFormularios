@@ -28,6 +28,9 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Claude Code local settings (puede contener permisos/rutas específicas de cada máquina)
+.claude/
+
 # Docker volumes (if local)
 postgres-data/
 

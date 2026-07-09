@@ -39,10 +39,17 @@ export function authRequired(req: AuthRequest, res: Response, next: NextFunction
 
 // Middleware: rechaza si el usuario no tiene alguno de los roles permitidos
 // Ejemplo: requireRole('ADMIN') o requireRole('ADMIN', 'DOCTOR')
+// MASTER es un super-admin: cualquier ruta que acepte 'ADMIN' también la puede
+// usar MASTER, sin tener que listar 'MASTER' en cada llamada a requireRole.
 export function requireRole(...roles: Role[]) {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
     if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
-    if (!roles.includes(req.user.role)) return res.status(403).json({ error: 'Forbidden' });
+    const ok = roles.includes(req.user.role) || (req.user.role === 'MASTER' && roles.includes('ADMIN'));
+    if (!ok) return res.status(403).json({ error: 'Forbidden' });
     next();
   };
 }
+
+// MASTER u ADMIN — usar en checks inline (fuera de requireRole) que necesiten
+// tratar a MASTER como admin con todos sus permisos.
+export const isAdminLike = (role: Role) => role === 'ADMIN' || role === 'MASTER';
