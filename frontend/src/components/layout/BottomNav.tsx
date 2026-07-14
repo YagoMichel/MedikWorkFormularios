@@ -31,12 +31,16 @@ export default function BottomNav({ isAdmin, isMaster }: BottomNavProps) {
     { to: '/',             icon: 'dashboard', label: 'Inicio'    },
     { to: '/appointments', icon: 'event',     label: 'Agenda'    },
     { to: '/patients',     icon: 'group',     label: 'Pacientes' },
+    { to: '/companies',    icon: 'business',  label: 'Empresas'  },
   ];
 
   const menuAdmin = [
+    { to: '/patients',   icon: 'group',       label: 'Pacientes'  },
     { to: '/inventory',  icon: 'inventory_2', label: 'Inventario' },
     { to: '/calendario', icon: 'date_range',  label: 'Calendario' },
     { to: '/reportes',   icon: 'bar_chart',   label: 'Reportes'   },
+    { to: '/auditoria',  icon: 'history',     label: 'Auditoría'  },
+    ...(isMaster ? [{ to: '/company-review', icon: 'approval', label: 'Aprobaciones' }] : []),
     ...(isMaster ? [{ to: '/system-status', icon: 'monitor_heart', label: 'Estado del sistema' }] : []),
   ];
 

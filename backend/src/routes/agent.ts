@@ -536,7 +536,8 @@ router.get('/batches/:id', async (req, res) => {
     telefono: batch.contactPhone,
     trabajadores: batch.appointments.map((a) => ({
       paciente_id: a.patientId,
-      nombre: a.patient.fullName,
+      // Las citas de batch se crean sin paciente (se asigna al llegar el trabajador)
+      nombre: a.patient?.fullName ?? null,
       hora: a.date.toISOString().slice(11, 16),
       status: a.status,
     })),

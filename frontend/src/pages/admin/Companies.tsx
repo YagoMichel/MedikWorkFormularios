@@ -6,6 +6,7 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../services/api';
+import { useAuth, isAdminRole } from '../../stores/auth';
 import toast from 'react-hot-toast';
 import {
   Plus, Building2, CheckCircle2, Phone, Calendar,
@@ -17,6 +18,8 @@ const EMPTY = { name: '', contactName: '', phone: '', email: '', address: '', no
 
 export default function Companies() {
   const qc = useQueryClient();
+  const user = useAuth((s) => s.user);
+  const canManage = isAdminRole(user?.role);
   const [search, setSearch] = useState('');
   const [modal, setModal] = useState<null | 'new' | any>(null);
   const [confirmDelete, setConfirmDelete] = useState<null | { id: string; name: string }>(null);
@@ -79,12 +82,16 @@ export default function Companies() {
     <div className="space-y-6">
       {/* ── HEADER ── */}
       <div className="flex justify-end gap-2 mt-4">
-        <button 
+        {canManage ? <button
           onClick={() => setModal(EMPTY)} 
           className="btn bg-[#3375c8] hover:bg-[#2860a5] text-white shadow-[0_4px_14px_rgba(51,117,200,0.3)] hover:shadow-[0_6px_20px_rgba(51,117,200,0.4)] hover:-translate-y-0.5 border-0"
         >
           <Plus size={18} strokeWidth={2.5} /> Nueva empresa
-        </button>
+        </button> : (
+          <div className="w-full rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+            Consulta de empresas. La creación y edición corresponde a administración.
+          </div>
+        )}
       </div>
 
       {/* ── STATS GRID ── */}
@@ -209,7 +216,7 @@ export default function Companies() {
                 <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Teléfono</th>
                 <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Estado</th>
                 <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Fecha de registro</th>
-                <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider text-right">Acciones</th>
+                {canManage && <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider text-right">Acciones</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50 bg-white dark:bg-slate-900">
@@ -264,7 +271,7 @@ export default function Companies() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
+                    {canManage && <td className="px-6 py-4">
                       <div className="flex gap-2 justify-end">
                         <button 
                           onClick={() => setModal(c)} 
@@ -283,14 +290,14 @@ export default function Companies() {
                           <Trash2 size={16} />
                         </button>
                       </div>
-                    </td>
+                    </td>}
                   </tr>
                 );
               })}
               
               {filtered.length === 0 && !isLoading && (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center">
+                  <td colSpan={canManage ? 5 : 4} className="px-6 py-12 text-center">
                     <div className="flex flex-col items-center justify-center text-slate-400 space-y-3">
                       <Building2 size={40} className="text-slate-200" />
                       <p>No se encontraron empresas.</p>
@@ -312,14 +319,14 @@ export default function Companies() {
                     <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-lg shrink-0">
                       {initials}
                     </div>
-                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {canManage && <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button onClick={() => setModal(c)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md bg-white border border-slate-100 shadow-sm">
                         <Pencil size={14} />
                       </button>
                       <button onClick={() => setConfirmDelete({ id: c.id, name: c.name })} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md bg-white border border-slate-100 shadow-sm">
                         <Trash2 size={14} />
                       </button>
-                    </div>
+                    </div>}
                   </div>
                   
                   <h3 className="font-bold text-slate-800 text-lg mb-1 truncate">{c.name}</h3>
@@ -355,7 +362,7 @@ export default function Companies() {
       </div>
 
       {/* ── MODALS ── */}
-      {confirmDelete && (
+      {canManage && confirmDelete && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white dark:bg-slate-800 rounded-2xl p-6 w-full max-w-sm shadow-xl">
             <h2 className="text-lg font-bold text-slate-900 dark:text-white">Eliminar empresa</h2>
@@ -368,7 +375,7 @@ export default function Companies() {
         </div>
       )}
 
-      {modal !== null && (
+      {canManage && modal !== null && (
         <CompanyModal
           initial={modal}
           onClose={() => setModal(null)}
@@ -421,4 +428,3 @@ function CompanyModal({ initial, onClose, onSave, saving }: any) {
     </div>
   );
 }
-

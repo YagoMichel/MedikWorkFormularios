@@ -300,24 +300,28 @@ export default function MainLayout() {
     { to: '/inventory', icon: 'inventory_2',    label: 'Inventario' },
     { to: '/pos',       icon: 'point_of_sale',  label: 'Punto de venta' },
     { to: '/sales',     icon: 'receipt_long',   label: 'Ventas'     },
+    { to: '/patients',  icon: 'group',          label: 'Pacientes'  },
     { to: '/companies', icon: 'business',       label: 'Empresas'   },
     { to: '/users',     icon: 'manage_accounts',label: 'Usuarios'   },
+    { to: '/auditoria', icon: 'history',        label: 'Auditoría'  },
     { to: '/citas',     icon: 'calendar_month', label: 'Citas'      },
     { to: '/calendario',icon: 'date_range',     label: 'Calendario' },
     { to: '/reportes',  icon: 'bar_chart',      label: 'Reportes'   },
+    ...(isMaster ? [{ to: '/company-review', icon: 'approval', label: 'Aprobaciones' }] : []),
     ...(isMaster ? [{ to: '/system-status', icon: 'monitor_heart', label: 'Estado del sistema' }] : []),
   ] : [
     { to: '/',             icon: 'dashboard', label: 'Dashboard' },
     { to: '/appointments', icon: 'event',     label: 'Agenda'    },
     { to: '/patients',     icon: 'group',     label: 'Pacientes' },
+    { to: '/companies',    icon: 'business',  label: 'Empresas'  },
   ];
 
   const titleMap: Record<string, string> = {
     '/': 'Dashboard', '/patients': 'Pacientes', '/sales': 'Ventas', '/pos': 'Punto de venta',
     '/appointments': 'Agenda', '/inventory': 'Inventario',
-    '/movements': 'Movimientos', '/users': 'Usuarios', '/prescriptions': 'Recetas',
+    '/movements': 'Movimientos', '/users': 'Usuarios', '/auditoria': 'Auditoría', '/prescriptions': 'Recetas',
     '/citas': 'Citas', '/calendario': 'Calendario', '/reportes': 'Reportes', '/companies': 'Empresas',
-    '/system-status': 'Estado del sistema',
+    '/system-status': 'Estado del sistema', '/company-review': 'Aprobaciones de empresa',
   };
   const title = titleMap[loc.pathname] || (loc.pathname.startsWith('/patients/') ? 'Ficha de paciente' : 'Mediwork');
 

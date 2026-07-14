@@ -15,6 +15,15 @@ const UPLOAD_DIR = process.env.UPLOAD_DIR || '/app/uploads';
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024 } });
 
+async function companyIdForName(company: unknown): Promise<string | null> {
+  if (typeof company !== 'string' || !company.trim() || company === 'Sin empresa') return null;
+  const match = await prisma.company.findFirst({
+    where: { name: { equals: company.trim(), mode: 'insensitive' } },
+    select: { id: true },
+  });
+  return match?.id ?? null;
+}
+
 // Valida el tipo real por magic bytes (no confiar en el mimetype del header)
 function sniffImage(buf: Buffer): 'jpg' | 'png' | 'webp' | null {
   if (buf.length < 12) return null;
@@ -34,11 +43,14 @@ router.post('/photo', upload.single('photo'), (req, res) => {
   res.status(201).json({ url: `/uploads/${filename}` });
 });
 
-// POST /api/surveys — guardar encuesta y registrar/actualizar paciente
+// POST /api/surveys — guardar datos en PostgreSQL y registrar/actualizar paciente.
+// No crea documentos, PDFs, carpetas ni archivos en el proveedor de nube; esa
+// operación es posterior y explícita desde el expediente documental.
 router.post('/', async (req: AuthRequest, res) => {
   const d = req.body;
 
   try {
+    const companyId = await companyIdForName(d.empresa);
     let patientId: string | null = d.patientId || null;
 
     // Si es paciente nuevo, crearlo con los datos de la encuesta
@@ -53,6 +65,7 @@ router.post('/', async (req: AuthRequest, res) => {
           gender: null,
           medicalNotes: null,
           company: d.empresa || null,
+          companyId,
           photoUrl: d.photoUrl || null,
         },
       });
@@ -66,6 +79,7 @@ router.post('/', async (req: AuthRequest, res) => {
           email: d.correo || undefined,
           nss: d.nss || undefined,
           company: d.empresa || undefined,
+          companyId: d.empresa ? companyId : undefined,
           photoUrl: d.photoUrl || undefined,
         },
       });
@@ -157,6 +171,7 @@ router.get('/', async (req: AuthRequest, res) => {
 router.put('/:id', async (req, res) => {
   const d = req.body;
   try {
+    const companyId = await companyIdForName(d.empresa);
     // Mantener sincronizados los datos básicos del paciente (se editaban en
     // el POST al crear, pero no aquí al actualizar una encuesta existente)
     if (d.patientId) {
@@ -167,6 +182,7 @@ router.put('/:id', async (req, res) => {
           email: d.correo || undefined,
           nss: d.nss || undefined,
           company: d.empresa || undefined,
+          companyId: d.empresa ? companyId : undefined,
           photoUrl: d.photoUrl || undefined,
         },
       });

@@ -540,6 +540,55 @@ const empty = {
   antecedentesPatologicos: ANTECEDENTES_PATOLOGICOS.map(({ condicion }) => ({ condicion, si: null as boolean | null, entradas: [{ especifique: '', fecha: '' }] })),
 };
 
+// Rehidrata una encuesta guardada (forma de PatientSurvey en la BD) de vuelta
+// a la forma del formulario mágico, para poder EDITARLA sin perder datos.
+// Los campos compuestos (que guardar() une en un string) se reconstruyen best-
+// effort; si un JSON no tiene la forma esperada, se deja el default para no
+// romper el render.
+function hydrateForm(s: any): Partial<typeof empty> {
+  if (!s) return {};
+  const out: any = {};
+  const scalars = ['empresa','tipoExamen','otroTipo','actividades','nombre','tipoSangre','puestoDeTrabajo',
+    'nss','fechaNacimiento','estadoCivil','correo','calle','numero','colonia','cp','cualDeporte',
+    'frecuenciaDeporte','horasDeporte','habitosAlimenticios','comidasDia','consumeFrutasVerduras','aguaDia',
+    'calidadSueno','horasSueno','especifiqueSueno','fuma','edadInicioFuma','anosFumando','cigarrosDia',
+    'tipoBebida','cantidadBebidas','frecuenciaAlcohol','consumeDrogas','dosisAnticovid','marcaVacuna',
+    'edadInicioLaboral','tiempoMinas','escolaridad'];
+  for (const k of scalars) if (s[k] != null && s[k] !== '') out[k] = s[k];
+  if (s.edad != null) out.edad = String(s.edad);
+  for (const k of ['practicaDeporte','consumeAlcohol','esquemaVacunacion','tieneTatuajes','usaAudifonos','trabajoMinas'])
+    if (s[k] != null) out[k] = s[k];
+
+  // celular guardado como "lada celular" → dejar el string completo y lada vacío
+  // (así al re-guardar no se duplica la lada).
+  if (s.celular) { out.celular = s.celular; out.lada = ''; }
+  // municipio guardado como "municipio, estado, pais" → dejar el string completo
+  // en municipio y estado/pais vacíos para no re-anexar al guardar.
+  if (s.municipio) { out.municipio = s.municipio; out.estado = ''; out.pais = ''; }
+  // lugarNacimiento se guarda unido; lo dejamos en el campo municipio de nacimiento.
+  if (s.lugarNacimiento) { out.lugarNacimientoMunicipio = s.lugarNacimiento; out.lugarNacimientoEstado = ''; out.lugarNacimientoPais = ''; }
+  // ultimoTatuaje guardado como "X años Y meses"
+  if (s.ultimoTatuaje) {
+    const a = String(s.ultimoTatuaje).match(/(\d+)\s*años/); if (a) out.ultimoTatuajeAnios = a[1];
+    const m = String(s.ultimoTatuaje).match(/(\d+)\s*meses/); if (m) out.ultimoTatuajeMeses = m[1];
+  }
+  // drogas guardadas como strings paralelos → reconstruir el arreglo
+  if (s.cualDroga) {
+    const pares = String(s.cualDroga).split(', ').map((x: string) => x.split('|'));
+    const frec = String(s.frecuenciaDroga || '').split(', ');
+    const tiempo = String(s.tiempoDroga || '').split(', ');
+    const ult = String(s.ultimaVezDroga || '').split(', ');
+    const arr = pares.map((d: string[], i: number) => ({ droga: d[0] || '', estado: d[1] || '', frecuencia: frec[i] || '', tiempo: tiempo[i] || '', ultimaVez: ult[i] || '' }));
+    if (arr.length) out.drogas = arr;
+  }
+  // JSON: usar solo si tiene la forma del formulario mágico
+  if (s.exposiciones && typeof s.exposiciones === 'object' && !Array.isArray(s.exposiciones)) out.exposiciones = { ...empty.exposiciones, ...s.exposiciones };
+  if (Array.isArray(s.antecedentesFamiliares) && s.antecedentesFamiliares[0]?.entradas) out.antecedentesFamiliares = s.antecedentesFamiliares;
+  if (Array.isArray(s.antecedentesPatologicos) && s.antecedentesPatologicos[0]?.entradas) out.antecedentesPatologicos = s.antecedentesPatologicos;
+  if (Array.isArray(s.historialEmpleos) && Array.isArray(s.historialEmpleos[0]?.exponentes)) out.historialEmpleos = s.historialEmpleos;
+  return out;
+}
+
 // ── Pasos del wizard ────────────────────────────────────────────────
 const STEP_COLOR = '#3375c8';
 const FORM_STEPS = [
@@ -553,9 +602,91 @@ const FORM_STEPS = [
   { icon: 'medical_information',label: 'Clínico',   color: STEP_COLOR },
 ];
 
+// Devuelve las etiquetas de los campos importantes que faltan por llenar en un
+// paso. Se usa para avisar (no bloquea) que falta información al cambiar de paso
+// y para marcar los pasos incompletos en la barra de progreso.
+const isBlankValue = (v: any) => !v || String(v).trim() === '';
+
+function missingForStep(step: number, f: any): string[] {
+  const miss: string[] = [];
+  const str = isBlankValue;                                  // texto vacío
+  const bool = (v: any) => v === null || v === undefined;   // sí/no sin responder
+  switch (step) {
+    case 1:
+      if (str(f.empresa)) miss.push('Empresa');
+      if (str(f.tipoExamen)) miss.push('Tipo de examen');
+      if (f.tipoExamen === 'Otro' && str(f.otroTipo)) miss.push('Especificar tipo de examen');
+      if (str(f.actividades)) miss.push('Actividades del puesto');
+      break;
+    case 2:
+      if (str(f.nombre)) miss.push('Nombre');
+      if (str(f.edad)) miss.push('Edad');
+      if (str(f.puestoDeTrabajo)) miss.push('Puesto de trabajo');
+      if (str(f.celular)) miss.push('Celular');
+      if (str(f.fechaNacimiento)) miss.push('Fecha de nacimiento');
+      if (str(f.correo)) miss.push('Correo');
+      if (str(f.calle)) miss.push('Calle');
+      if (str(f.colonia)) miss.push('Colonia');
+      if (str(f.cp)) miss.push('Código postal');
+      if (f.escolaridad && f.escolaridad !== 'Sin estudios' && str(f.escolaridadEstatus)) miss.push('Estatus de escolaridad');
+      break;
+    case 3:
+      if (bool(f.practicaDeporte)) miss.push('¿Practica deporte?');
+      if (f.practicaDeporte && (str(f.cualDeporte) || str(f.frecuenciaDeporte) || str(f.horasDeporte)))
+        miss.push('Detalles de la actividad física');
+      if (str(f.habitosAlimenticios)) miss.push('Hábitos alimenticios');
+      if (str(f.calidadSueno)) miss.push('Calidad del sueño');
+      if ((f.calidadSueno === 'Malo' || f.calidadSueno === 'Regular') && str(f.especifiqueSueno))
+        miss.push('Motivo de la calidad del sueño');
+      break;
+    case 4:
+      if (str(f.fuma)) miss.push('¿Fuma?');
+      if ((f.fuma === 'SI' || f.fuma === 'EXFUMADOR') && (str(f.edadInicioFuma) || str(f.anosFumando) || str(f.cigarrosDia)))
+        miss.push('Detalles de tabaquismo');
+      if (bool(f.consumeAlcohol)) miss.push('¿Consume alcohol?');
+      if (f.consumeAlcohol && (str(f.tipoBebida) || str(f.cantidadBebidas) || str(f.frecuenciaAlcohol)))
+        miss.push('Detalles del consumo de alcohol');
+      if (str(f.consumeDrogas)) miss.push('¿Consume drogas?');
+      if (f.consumeDrogas === 'SI' && (!Array.isArray(f.drogas) || f.drogas.some((d: any) =>
+        str(d.droga) || str(d.estado) || str(d.frecuencia) || str(d.tiempo) || str(d.ultimaVez))))
+        miss.push('Detalles del consumo de drogas');
+      break;
+    case 5:
+      if (bool(f.esquemaVacunacion)) miss.push('Esquema de vacunación');
+      if (bool(f.tieneTatuajes)) miss.push('¿Tiene tatuajes?');
+      if (f.tieneTatuajes && str(f.ultimoTatuajeAnios) && str(f.ultimoTatuajeMeses))
+        miss.push('Fecha del tatuaje más reciente');
+      if (bool(f.usaAudifonos)) miss.push('¿Usa audífonos?');
+      break;
+    case 6:
+      if (Array.isArray(f.antecedentesFamiliares) && f.antecedentesFamiliares.some((a: any) => bool(a.si)))
+        miss.push('Antecedentes familiares (falta responder sí/no)');
+      if (Array.isArray(f.antecedentesFamiliares) && f.antecedentesFamiliares.some((a: any) =>
+        a.si && (a.enfermedad === 'Otras'
+          ? !Array.isArray(a.entradas) || a.entradas.some((e: any) => str(e.especifique) || !Array.isArray(e.familiares) || e.familiares.length === 0)
+          : !Array.isArray(a.familiares) || a.familiares.length === 0)))
+        miss.push('Detalle de antecedentes familiares marcados con Sí');
+      break;
+    case 7:
+      if (str(f.edadInicioLaboral)) miss.push('Edad de inicio laboral');
+      if (bool(f.trabajoMinas)) miss.push('¿Ha trabajado en minas?');
+      if (f.trabajoMinas && str(f.tiempoMinas)) miss.push('Tiempo trabajado en minas');
+      break;
+    case 8:
+      if (Array.isArray(f.antecedentesPatologicos) && f.antecedentesPatologicos.some((a: any) => bool(a.si)))
+        miss.push('Antecedentes patológicos (falta responder sí/no)');
+      if (Array.isArray(f.antecedentesPatologicos) && f.antecedentesPatologicos.some((a: any) =>
+        a.si && (!Array.isArray(a.entradas) || a.entradas.some((e: any) => str(e.especifique) || str(e.fecha)))))
+        miss.push('Detalle de antecedentes patológicos marcados con Sí');
+      break;
+  }
+  return miss;
+}
+
 // ── Color de paso activo (contexto ligero) ───────────────────────────
 const StepColorCtx = createContext('#3375c8');
 const useStepColor = () => useContext(StepColorCtx);
+const ShowValidationCtx = createContext(false);
 
 // ── Componentes reutilizables ────────────────────────────────────────
 
@@ -577,6 +708,28 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+function ConditionalBlock({ missing, children, className = '' }: {
+  missing: string[];
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const incomplete = useContext(ShowValidationCtx) && missing.length > 0;
+  return (
+    <div className={className}
+      style={incomplete
+        ? { borderLeft: '3px solid #f59e0b', paddingLeft: 10 }
+        : undefined}>
+      {incomplete && (
+        <div className="flex items-center gap-1 mb-2 text-[11px] font-semibold" style={{ color: '#b45309' }} role="alert">
+          <span className="material-symbols-rounded" style={{ fontSize: 15 }}>priority_high</span>
+          Pendiente: {missing.join(', ')}
+        </div>
+      )}
+      {children}
+    </div>
+  );
+}
+
 function SectionHeader({ icon, title, color }: { icon: string; title: string; color?: string }) {
   const c = color ?? '#3375c8';
   return (
@@ -590,11 +743,12 @@ function SectionHeader({ icon, title, color }: { icon: string; title: string; co
   );
 }
 
-function StepProgress({ current, total, steps, onGoTo }: {
+function StepProgress({ current, total, steps, onGoTo, incomplete = [] }: {
   current: number;
   total: number;
   steps: typeof FORM_STEPS;
   onGoTo: (step: number) => void;
+  incomplete?: number[]; // números de paso con campos por llenar (aviso ámbar)
 }) {
   return (
     <div className="sticky top-0 z-10 px-4 py-3 border-b"
@@ -609,25 +763,35 @@ function StepProgress({ current, total, steps, onGoTo }: {
         {steps.map((s, i) => {
           const done = i + 1 < current;
           const active = i + 1 === current;
+          const warn = incomplete.includes(i + 1); // faltan campos en este paso
           return (
             <button key={i} type="button"
               onClick={() => onGoTo(i + 1)}
               className="flex flex-col items-center gap-1 transition-opacity hover:opacity-80"
               style={{ minWidth: 0, cursor: 'pointer' }}
-              title={s.label}>
-              <div className="w-7 h-7 rounded-full flex items-center justify-center transition-all duration-300"
-                style={active
-                  ? { background: s.color, boxShadow: `0 0 0 3px ${s.color}30` }
-                  : done
-                    ? { background: s.color, opacity: 0.75 }
-                    : { background: 'var(--bg-elevated)', border: '2px solid var(--border-subtle)' }}>
-                {done
-                  ? <span className="material-symbols-rounded text-white" style={{ fontSize: 14 }}>check</span>
-                  : <span className="material-symbols-rounded" style={{ fontSize: 14, color: active ? '#fff' : 'var(--text-muted)' }}>{s.icon}</span>
-                }
+              title={warn ? `${s.label} — falta información` : s.label}>
+              <div className="relative">
+                <div className="w-7 h-7 rounded-full flex items-center justify-center transition-all duration-300"
+                  style={active
+                    ? { background: s.color, boxShadow: `0 0 0 3px ${warn ? '#f59e0b' : s.color}30` }
+                    : done
+                      ? { background: s.color, opacity: 0.75 }
+                      : { background: 'var(--bg-elevated)', border: `2px solid ${warn ? '#f59e0b' : 'var(--border-subtle)'}` }}>
+                  {done
+                    ? <span className="material-symbols-rounded text-white" style={{ fontSize: 14 }}>check</span>
+                    : <span className="material-symbols-rounded" style={{ fontSize: 14, color: active ? '#fff' : warn ? '#f59e0b' : 'var(--text-muted)' }}>{s.icon}</span>
+                  }
+                </div>
+                {/* Aviso ámbar: faltan campos por llenar en este paso */}
+                {warn && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-500 text-white flex items-center justify-center border-2"
+                    style={{ borderColor: 'var(--bg-card)' }}>
+                    <span className="material-symbols-rounded" style={{ fontSize: 10, fontWeight: 700 }}>priority_high</span>
+                  </span>
+                )}
               </div>
               <span className="text-[9px] font-semibold hidden sm:block transition-all"
-                style={{ color: active ? s.color : 'var(--text-muted)' }}>
+                style={{ color: active ? s.color : warn ? '#d97706' : 'var(--text-muted)' }}>
                 {s.label}
               </span>
             </button>
@@ -928,14 +1092,34 @@ function BoolPills({ value, onChange, color: colorProp }: { value: boolean | nul
 
 // ── Componente principal ─────────────────────────────────────────────
 
-export default function SurveyFlow({ onClose }: { onClose: () => void }) {
-  const [step, setStep] = useState<Step>('tipo');
+export default function SurveyFlow({ onClose, portalMode = false, onSubmit, initialName, initialEmail, initialData, startReadOnly = false }: {
+  onClose: () => void;
+  // Modo portal del paciente: arranca directo en el formulario (sin el paso
+  // "nuevo/registrado" ni la búsqueda de otros pacientes) y envía con onSubmit
+  // al endpoint del portal, que lo liga al expediente de la cuenta.
+  portalMode?: boolean;
+  onSubmit?: (payload: any) => Promise<void>;
+  initialName?: string;
+  initialEmail?: string;
+  // Encuesta ya guardada para prellenar (editar). Y si startReadOnly, arranca
+  // en modo lectura: se ve la encuesta y hay que dar "Editar" para modificarla.
+  initialData?: any;
+  startReadOnly?: boolean;
+}) {
+  const [step, setStep] = useState<Step>(portalMode ? 'form' : 'tipo');
   const [formStep, setFormStep] = useState(1);
+  const [warnedSteps, setWarnedSteps] = useState<number[]>([]);
+  const [readOnly, setReadOnly] = useState(startReadOnly);
   const [patientId, setPatientId] = useState<string | null>(null);
   const [empresaBusqueda, setEmpresaBusqueda] = useState('');
   const [busqueda, setBusqueda] = useState('');
   const [resultados, setResultados] = useState<any[]>([]);
-  const [form, setForm] = useState({ ...empty });
+  const [form, setForm] = useState({
+    ...empty,
+    ...hydrateForm(initialData),
+    nombre: initialData?.nombre || initialName || '',
+    correo: initialData?.correo || initialEmail || '',
+  });
   const [saving, setSaving] = useState(false);
   const [cpLoading, setCpLoading] = useState(false);
   const [coloniaOpciones, setColoniaOpciones] = useState<string[]>([]);
@@ -948,6 +1132,18 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
     api.get('/public/companies').then(r => setCompanies(r.data)).catch(() => {});
     loadMunicipiosDB().then(db => setMunicipiosDB(db));
   }, []);
+
+  // El perfil del portal puede terminar de cargar después del formulario.
+  // Solo completa valores vacíos para respetar encuestas y cambios existentes.
+  useEffect(() => {
+    setForm(current => {
+      const nombre = current.nombre || initialName || '';
+      const correo = current.correo || initialEmail || '';
+      return nombre === current.nombre && correo === current.correo
+        ? current
+        : { ...current, nombre, correo };
+    });
+  }, [initialName, initialEmail]);
 
   const set = (key: string, val: any) => setForm(f => ({ ...f, [key]: val }));
 
@@ -1062,7 +1258,11 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
         escolaridad:     [rest.escolaridad, escolaridadEstatus].filter(Boolean).join(' — '),
         lugarNacimiento: [lugarNacimientoMunicipio, lugarNacimientoEstado, lugarNacimientoPais].filter(Boolean).join(', '),
       };
-      await api.post('/surveys', payload);
+      if (onSubmit) {
+        await onSubmit(payload);
+      } else {
+        await api.post('/surveys', payload);
+      }
       setStep('done');
     } catch (e: any) {
       toast.error(e.response?.data?.error || 'Error al guardar');
@@ -1081,7 +1281,7 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
       <div>
         <h2 className="text-2xl font-extrabold mb-2" style={{ color: 'var(--text-primary)' }}>¡Encuesta completada!</h2>
         <p className="text-sm max-w-xs mx-auto" style={{ color: 'var(--text-muted)' }}>
-          Tus datos han sido guardados. El personal te indicará los siguientes pasos.
+          Tus datos fueron guardados en el sistema. El expediente documental se generará posteriormente por el personal de la clínica.
         </p>
       </div>
       <button onClick={onClose} className="btn btn-primary px-10 py-3 text-base">Finalizar</button>
@@ -1263,15 +1463,58 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
   const ap = form.antecedentesPatologicos;
 
   const stepColor = FORM_STEPS[formStep - 1].color;
+  // Campos faltantes: del paso actual (para el aviso) y de todos (para marcar la
+  // barra de pasos). Solo aplican al llenar, no en modo lectura.
+  const showCurrentWarnings = !readOnly && warnedSteps.includes(formStep);
+  const stepMissing = showCurrentWarnings ? missingForStep(formStep, form) : [];
+  const incompleteSteps = readOnly ? [] : warnedSteps.filter(step => missingForStep(step, form).length > 0);
+  const markStepIfIncomplete = (step: number) => {
+    if (readOnly || missingForStep(step, form).length === 0) return;
+    setWarnedSteps(previous => previous.includes(step) ? previous : [...previous, step]);
+  };
+  const goToStep = (nextStep: number) => {
+    if (nextStep !== formStep) markStepIfIncomplete(formStep);
+    setFormStep(nextStep);
+    scrollRef.current?.scrollTo(0, 0);
+  };
+  const goNext = () => {
+    goToStep(formStep + 1);
+  };
 
   return (
     <StepColorCtx.Provider value={stepColor}>
+    <ShowValidationCtx.Provider value={showCurrentWarnings}>
     <div className="flex-1 flex flex-col overflow-hidden">
-      <StepProgress current={formStep} total={FORM_STEPS.length} steps={FORM_STEPS}
-        onGoTo={n => { setFormStep(n); scrollRef.current?.scrollTo(0, 0); }} />
+      <StepProgress current={formStep} total={FORM_STEPS.length} steps={FORM_STEPS} incomplete={incompleteSteps}
+        onGoTo={goToStep} />
+
+      {readOnly && (
+        <div className="mx-4 md:mx-6 mt-3 flex items-center justify-between gap-3 rounded-xl px-4 py-2.5"
+          style={{ background: `${stepColor}12`, border: `1px solid ${stepColor}30` }}>
+          <span className="text-sm font-semibold" style={{ color: stepColor }}>Estás viendo tu encuesta enviada.</span>
+          <button onClick={() => setReadOnly(false)} className="btn flex items-center gap-1.5 text-white text-sm" style={{ background: stepColor }}>
+            <span className="material-symbols-rounded text-[18px]">edit</span> Editar
+          </button>
+        </div>
+      )}
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
       <div className="p-4 md:p-6 space-y-5 pb-6">
+
+        {/* Aviso: campos importantes que faltan en este paso (no bloquea) */}
+        {stepMissing.length > 0 && (
+          <div className="rounded-xl px-4 py-3 flex items-start gap-3" style={{ background: '#fffbeb', border: '1px solid #fcd34d' }}>
+            <span className="material-symbols-rounded" style={{ color: '#d97706', fontSize: 20 }}>warning</span>
+            <div style={{ color: '#92400e' }}>
+              <div className="text-sm font-bold mb-0.5">Falta información en este paso</div>
+              <div className="text-xs">{stepMissing.join(' · ')}</div>
+            </div>
+          </div>
+        )}
+
+        {/* En modo lectura, fieldset deshabilita todos los campos (la navegación
+            entre pasos queda fuera del fieldset y sigue activa para revisar). */}
+        <fieldset disabled={readOnly} className="space-y-5 border-0 p-0 m-0 min-w-0">
 
         {/* ── PASO 1: Trabajo ─────────────────────────────── */}
         {formStep === 1 && <section className="card space-y-4">
@@ -1546,7 +1789,13 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
           </div>
 
           {form.practicaDeporte && (
-            <div className="space-y-4">
+            <ConditionalBlock
+              missing={[
+                isBlankValue(form.cualDeporte) ? 'actividad' : '',
+                isBlankValue(form.frecuenciaDeporte) ? 'frecuencia' : '',
+                isBlankValue(form.horasDeporte) ? 'horas por semana' : '',
+              ].filter(Boolean)}
+              className="space-y-4">
               <Field label="¿Qué actividad física practica?">
                 <input className="input" placeholder="Ej. Correr, natación, fútbol, gimnasio"
                   value={form.cualDeporte} onChange={e => set('cualDeporte', e.target.value)} />
@@ -1568,7 +1817,7 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
                 <input className="input" placeholder="Ej. 5" type="tel"
                   value={form.horasDeporte} onChange={e => set('horasDeporte', e.target.value.replace(/\D/g, ''))} />
               </Field>
-            </div>
+            </ConditionalBlock>
           )}
 
           {/* ── Alimentación ── */}
@@ -1656,10 +1905,12 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
           </div>
 
           {(form.calidadSueno === 'Malo' || form.calidadSueno === 'Regular') && (
-            <Field label="¿Por qué? (insomnio, estrés, ronquidos…)">
-              <input className="input" placeholder="Ej. Insomnio, me desvelo con el celular, ronco"
-                value={form.especifiqueSueno} onChange={e => set('especifiqueSueno', e.target.value)} />
-            </Field>
+            <ConditionalBlock missing={isBlankValue(form.especifiqueSueno) ? ['motivo'] : []}>
+              <Field label="¿Por qué? (insomnio, estrés, ronquidos…)">
+                <input className="input" placeholder="Ej. Insomnio, me desvelo con el celular, ronco"
+                  value={form.especifiqueSueno} onChange={e => set('especifiqueSueno', e.target.value)} />
+              </Field>
+            </ConditionalBlock>
           )}
         </section>}
 
@@ -1683,7 +1934,13 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
                 />
               </div>
               {(form.fuma === 'SI' || form.fuma === 'EXFUMADOR') && (
-                <div className="space-y-3">
+                <ConditionalBlock
+                  missing={[
+                    isBlankValue(form.edadInicioFuma) ? 'edad de inicio' : '',
+                    isBlankValue(form.anosFumando) ? 'años fumando' : '',
+                    isBlankValue(form.cigarrosDia) ? 'cigarros por día' : '',
+                  ].filter(Boolean)}
+                  className="space-y-3">
                   <Field label="Edad de inicio">
                     <input className="input" placeholder="Ej. 18"
                       value={form.edadInicioFuma} onChange={e => set('edadInicioFuma', e.target.value)} />
@@ -1696,7 +1953,7 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
                     <input className="input" placeholder="Ej. 10"
                       value={form.cigarrosDia} onChange={e => set('cigarrosDia', e.target.value)} />
                   </Field>
-                </div>
+                </ConditionalBlock>
               )}
             </div>
 
@@ -1710,7 +1967,13 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
                 <BoolPills value={form.consumeAlcohol} onChange={v => set('consumeAlcohol', v)} />
               </div>
               {form.consumeAlcohol && (
-                <div className="space-y-3">
+                <ConditionalBlock
+                  missing={[
+                    isBlankValue(form.tipoBebida) ? 'tipo de bebida' : '',
+                    isBlankValue(form.cantidadBebidas) ? 'cantidad' : '',
+                    isBlankValue(form.frecuenciaAlcohol) ? 'frecuencia' : '',
+                  ].filter(Boolean)}
+                  className="space-y-3">
                   <Field label="¿Qué tipo de bebida?">
                     <input className="input" placeholder="Ej. Cerveza, vino, whisky"
                       value={form.tipoBebida} onChange={e => set('tipoBebida', e.target.value)} />
@@ -1725,7 +1988,7 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
                       {FRECUENCIAS_ALCOHOL.map(f => <option key={f} value={f}>{f}</option>)}
                     </select>
                   </Field>
-                </div>
+                </ConditionalBlock>
               )}
             </div>
 
@@ -1746,7 +2009,12 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
                 />
               </div>
               {form.consumeDrogas === 'SI' && (
-                <div className="space-y-3">
+                <ConditionalBlock
+                  missing={form.drogas.flatMap((d, i) => {
+                    const fields = [d.droga, d.estado, d.frecuencia, d.tiempo, d.ultimaVez];
+                    return fields.some(isBlankValue) ? [`datos de la droga ${i + 1}`] : [];
+                  })}
+                  className="space-y-3">
                   {form.drogas.map((d, i) => (
                     <div key={i} className="space-y-2 rounded-lg p-2" style={{ background: 'var(--bg-subtle, rgba(0,0,0,.04))' }}>
                       {form.drogas.length > 1 && (
@@ -1806,7 +2074,7 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
                     <span className="material-symbols-rounded" style={{ fontSize: 16 }}>add</span>
                     Agregar otra droga
                   </button>
-                </div>
+                </ConditionalBlock>
               )}
             </div>
 
@@ -1868,7 +2136,8 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
             <BoolPills value={form.tieneTatuajes} onChange={v => set('tieneTatuajes', v)} />
           </div>
           {form.tieneTatuajes && (
-            <div>
+            <ConditionalBlock missing={isBlankValue(form.ultimoTatuajeAnios) && isBlankValue(form.ultimoTatuajeMeses)
+              ? ['años o meses desde el tatuaje'] : []}>
               <Label>¿Cuándo fue el más reciente?</Label>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Años">
@@ -1882,7 +2151,7 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
                     onChange={e => set('ultimoTatuajeMeses', e.target.value.replace(/\D/g, ''))} />
                 </Field>
               </div>
-            </div>
+            </ConditionalBlock>
           )}
 
           <div>
@@ -1909,7 +2178,7 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
                       set('antecedentesFamiliares', next);
                     }} />
                     {item.si && !isOtras && (
-                      <div className="pt-1">
+                      <ConditionalBlock missing={item.familiares.length === 0 ? ['familiar'] : []} className="mt-1">
                         <ParientesMultiSelect
                           selected={item.familiares}
                           onToggle={p => {
@@ -1921,10 +2190,17 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
                             set('antecedentesFamiliares', next);
                           }}
                         />
-                      </div>
+                      </ConditionalBlock>
                     )}
                     {item.si && isOtras && (
-                      <div className="pt-1 space-y-3">
+                      <ConditionalBlock
+                        missing={item.entradas.flatMap((entrada, ei) => {
+                          const fields: string[] = [];
+                          if (isBlankValue(entrada.especifique)) fields.push(`enfermedad ${ei + 1}`);
+                          if (entrada.familiares.length === 0) fields.push(`familiar ${ei + 1}`);
+                          return fields;
+                        })}
+                        className="mt-1 space-y-3">
                         {item.entradas.map((entrada, ei) => (
                           <div key={ei} className="space-y-2 rounded-lg p-2" style={{ background: 'var(--bg-subtle, rgba(0,0,0,.04))' }}>
                             <div className="flex items-end gap-2">
@@ -1980,7 +2256,7 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
                           <span className="material-symbols-rounded" style={{ fontSize: 15 }}>add</span>
                           Añadir
                         </button>
-                      </div>
+                      </ConditionalBlock>
                     )}
                   </div>
                 </div>
@@ -2004,10 +2280,12 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
             </div>
           </div>
           {form.trabajoMinas && (
-            <Field label="¿Cuánto tiempo trabajó en minas?">
-              <input className="input" placeholder="Ej. 3 años, 6 meses"
-                value={form.tiempoMinas} onChange={e => set('tiempoMinas', e.target.value)} />
-            </Field>
+            <ConditionalBlock missing={isBlankValue(form.tiempoMinas) ? ['tiempo trabajado'] : []}>
+              <Field label="¿Cuánto tiempo trabajó en minas?">
+                <input className="input" placeholder="Ej. 3 años, 6 meses"
+                  value={form.tiempoMinas} onChange={e => set('tiempoMinas', e.target.value)} />
+              </Field>
+            </ConditionalBlock>
           )}
 
           <div>
@@ -2143,7 +2421,14 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
                     set('antecedentesPatologicos', next);
                   }} />
                   {item.si && (
-                    <div className="mt-2 space-y-2">
+                    <ConditionalBlock
+                      missing={item.entradas.flatMap((entrada, ei) => {
+                        const fields: string[] = [];
+                        if (isBlankValue(entrada.especifique)) fields.push(`especificación ${ei + 1}`);
+                        if (isBlankValue(entrada.fecha)) fields.push(`tiempo ${ei + 1}`);
+                        return fields;
+                      })}
+                      className="mt-2 space-y-2">
                       {item.entradas.map((entrada, ei) => (
                         <div key={ei} className="grid grid-cols-2 gap-3 items-end">
                           <Field label="Especifique">
@@ -2185,18 +2470,19 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
                         <span className="material-symbols-rounded" style={{ fontSize: 15 }}>add</span>
                         Agregar
                       </button>
-                    </div>
+                    </ConditionalBlock>
                   )}
                 </div>
               );
             })}
           </div>
         </section>}
+        </fieldset>
 
         {/* ── Navegación entre pasos ────────────────────────── */}
         <div className="flex items-center justify-between pt-2 pb-2">
           <button
-            onClick={() => formStep > 1 ? setFormStep(s => s - 1) : onClose()}
+            onClick={() => formStep > 1 ? goToStep(formStep - 1) : onClose()}
             className="btn btn-secondary flex items-center gap-2">
             <span className="material-symbols-rounded text-[18px]">
               {formStep > 1 ? 'arrow_back' : 'close'}
@@ -2210,11 +2496,18 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
 
           {formStep < FORM_STEPS.length ? (
             <button
-              onClick={() => { setFormStep(s => s + 1); scrollRef.current?.scrollTo(0, 0); }}
+              onClick={goNext}
               className="btn flex items-center gap-2 text-white"
               style={{ background: stepColor, boxShadow: `0 2px 12px ${stepColor}50` }}>
               Siguiente
               <span className="material-symbols-rounded text-[18px]">arrow_forward</span>
+            </button>
+          ) : readOnly ? (
+            <button onClick={() => setReadOnly(false)}
+              className="btn flex items-center gap-2 text-white"
+              style={{ background: stepColor, boxShadow: `0 2px 12px ${stepColor}50` }}>
+              <span className="material-symbols-rounded text-[18px]">edit</span>
+              Editar
             </button>
           ) : (
             <button onClick={guardar} disabled={saving}
@@ -2229,6 +2522,7 @@ export default function SurveyFlow({ onClose }: { onClose: () => void }) {
       </div>
       </div>
     </div>
+    </ShowValidationCtx.Provider>
     </StepColorCtx.Provider>
   );
 }

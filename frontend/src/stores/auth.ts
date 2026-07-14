@@ -8,14 +8,17 @@
 //   MASTER  → todo lo de ADMIN + gestión de cuentas ADMIN/MASTER
 //   ADMIN   → acceso completo (compañero)
 //   DOCTOR  → agenda, pacientes, recetas (tu)
-//   PACIENTE→ solo encuesta tablet (tu)
+//   PACIENTE_TABLET → solo encuesta tablet (kiosco)
+//   PACIENTE → portal del paciente (su propio expediente)
+//   EMPRESA  → portal de empresa (resultados de sus empleados)
 //
 // USO: const { user, logout } = useAuth();
 // =============================================================
 
 import { create } from 'zustand';
+import { api } from '../services/api';
 
-export type Role = 'ADMIN' | 'DOCTOR' | 'PACIENTE' | 'AGENT' | 'MASTER';
+export type Role = 'ADMIN' | 'DOCTOR' | 'PACIENTE_TABLET' | 'PACIENTE' | 'EMPRESA' | 'AGENT' | 'MASTER';
 
 // MASTER tiene todo el acceso de ADMIN (y más) — usar este helper en vez de
 // comparar contra 'ADMIN' directamente para que MASTER no quede excluido.
@@ -60,8 +63,10 @@ export const useAuth = create<AuthStore>((set) => ({
     set({ token, user });
   },
 
-  // Limpia sesion al cerrar sesion
+  // Limpia sesion al cerrar sesion. Tambien avisa al backend para que borre
+  // la cookie httpOnly (usada para servir /uploads) — fire-and-forget.
   logout: () => {
+    api.post('/auth/logout').catch(() => {});
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     set({ token: null, user: null });

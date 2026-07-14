@@ -24,11 +24,17 @@ import 'express-async-errors'; // hace que los errores de handlers async lleguen
 import express from 'express';
 import { prisma } from './prisma';
 import cors from 'cors';
+import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import { createServer } from 'http';
 import { initSocket } from './socket';
+import { authRequiredCookieOrHeader, AuthRequest } from './middleware/auth';
+import { apiLimiter, publicSurveyLimiter, publicCpLimiter } from './middleware/rateLimits';
+import { verifyTurnstile } from './middleware/turnstile';
 
 // ---- Rutas protegidas (requieren token JWT) ----
 import auth         from './routes/auth';
+import oauth        from './routes/oauth';
 import patients     from './routes/patients';
 import appointments from './routes/appointments';
 import prescriptions from './routes/prescriptions';
@@ -44,17 +50,56 @@ import batches      from './routes/batches';
 import surveys      from './routes/surveys';
 import medicalExams from './routes/medicalExams';
 import documents    from './routes/documents';
+import portal       from './routes/portal';
 import system       from './routes/system';
+import audit        from './routes/audit';
 
 const app = express();
 
+// Detrás de nginx: confiar en los proxies delante para que req.ip sea la IP
+// real del cliente (necesario para rate limits y la IP de la bitácora).
+//
+// TRUST_PROXY_HOPS = número EXACTO de proxies confiables entre el cliente e
+// internet y este backend. Debe coincidir con la topología real:
+//   1 → solo el nginx del contenedor es el borde (default, local/dev)
+//   2 → hay UN reverse proxy del host (nginx/Caddy) delante del nginx del contenedor
+//   …  → un salto más por cada proxy adicional
+// OJO: poner un número MAYOR al real es un hueco de seguridad — deja que un
+// cliente falsee su IP con un X-Forwarded-For inventado. Con CDN (Cloudflare)
+// no se usa esto: se lee CF-Connecting-IP y se restringe a las IPs del CDN.
+app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS ?? 1));
+
 // ---- Middlewares globales ----
-app.use(cors());
+app.use(helmet()); // cabeceras de seguridad estándar (X-Content-Type-Options, HSTS, etc.)
+
+// CORS: en producción definir CORS_ORIGIN (lista separada por comas, ej.
+// "https://clinica.mediworkzac.com") — sin definirla se permite cualquier
+// origen, aceptable solo en desarrollo.
+const corsOrigins = process.env.CORS_ORIGIN?.split(',').map((o) => o.trim()).filter(Boolean);
+app.use(cors(corsOrigins?.length ? { origin: corsOrigins, credentials: true } : {}));
+
+app.use(cookieParser());
 app.use(express.json({ limit: '10mb' })); // limite para imagenes en base64
 
-// ---- Archivos subidos (fotos de pacientes, recetas) ----
+// Límite global de peticiones a la API (los límites finos por ruta —
+// login, encuesta pública, CP — se aplican abajo por separado)
+app.use('/api', apiLimiter);
+
+// ---- Archivos subidos (fotos de pacientes, documentos) ----
+// Protegidos: aceptan el JWT por header o por la cookie httpOnly (los <img> del
+// navegador no mandan headers, pero la cookie viaja sola).
 const UPLOAD_DIR = process.env.UPLOAD_DIR || '/app/uploads';
-app.use('/uploads', express.static(UPLOAD_DIR));
+// Los documentos del expediente (/uploads/documents) solo se sirven DIRECTO al
+// personal interno. Los portales (PACIENTE/EMPRESA) NUNCA acceden por ruta:
+// usan sus endpoints de descarga que verifican propiedad + autorización del
+// médico. Así un usuario de portal no puede leer un archivo ajeno por su ruta.
+const STAFF_ROLES = ['ADMIN', 'DOCTOR', 'MASTER'];
+app.use('/uploads', authRequiredCookieOrHeader, (req: AuthRequest, res, next) => {
+  if (req.path.startsWith('/documents') && !STAFF_ROLES.includes(req.user!.role)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  next();
+}, express.static(UPLOAD_DIR));
 
 // ---- Health check (Docker/nginx lo usa para saber si el server vive) ----
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
@@ -74,7 +119,8 @@ app.get('/api/public/companies', async (_req, res) => {
 
 // Encuesta medica que llena el paciente en la tablet antes del examen
 // Crea el paciente y su encuesta en una sola operacion
-app.post('/api/public/survey', async (req, res) => {
+// Protegida contra bots: rate limit + captcha Turnstile (si está configurado)
+app.post('/api/public/survey', publicSurveyLimiter, verifyTurnstile, async (req, res) => {
   const d = req.body;
   try {
     // Primero crea el paciente con datos basicos
@@ -137,7 +183,7 @@ app.post('/api/public/survey', async (req, res) => {
 });
 
 // Proxy de código postal — prueba varias APIs en cascada
-app.get('/api/public/cp/:codigo', async (req, res) => {
+app.get('/api/public/cp/:codigo', publicCpLimiter, async (req, res) => {
   const { codigo } = req.params;
   if (!/^\d{5}$/.test(codigo)) return res.status(400).json({ error: 'CP inválido' }) as any;
 
@@ -201,6 +247,7 @@ app.get('/api/public/cp/:codigo', async (req, res) => {
 // =============================================================
 
 // -- Autenticacion --
+app.use('/api/auth/oauth',   oauth);         // Login social Google/Microsoft (config-gated)
 app.use('/api/auth',         auth);
 
 // -- Doctor / Compartido (DOCTOR + ADMIN) --
@@ -210,6 +257,9 @@ app.use('/api/prescriptions',prescriptions); // Recetas
 app.use('/api/surveys',      surveys);       // Encuestas medicas
 app.use('/api/medical-exams',medicalExams);  // Examenes medicos
 app.use('/api/documents',    documents);     // Expediente documental (encuesta, resultados, consentimiento)
+
+// -- Portales externos (PACIENTE / EMPRESA) — cada quien ve solo lo suyo --
+app.use('/api/portal',       portal);
 
 // -- Admin --
 app.use('/api/inventory',    inventory);     // Inventario de productos
@@ -221,6 +271,7 @@ app.use('/api/companies',    companies);     // Empresas clientes
 app.use('/api/company-profiles', companyProfiles); // Perfiles/checklist de estudios por empresa
 app.use('/api/batches',      batches);       // Citas de empresa
 app.use('/api/system',       system);        // Panel de estado (exclusivo MASTER)
+app.use('/api/audit',        audit);         // Bitácora de auditoría (ADMIN/MASTER)
 
 // -- Bot externo (WhatsApp u otro canal, desarrollado por 3er ingeniero) --
 // Auth: JWT con role AGENT — generar con: npm run agent:token

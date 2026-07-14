@@ -64,7 +64,9 @@ Primera vez tarda unos minutos mientras descarga imágenes y construye. Las sigu
 |---|---|
 | `ADMIN` | Acceso completo: pacientes, empresas, usuarios, inventario, ventas |
 | `DOCTOR` | Pacientes, citas, resultados de exámenes |
-| `PACIENTE` | Vista tablet para llenar cuestionario médico |
+| `PACIENTE_TABLET` | Vista tablet (kiosco) para llenar cuestionario médico |
+| `PACIENTE` | Portal del paciente: ve solo su propio expediente y llena su encuesta |
+| `EMPRESA` | Portal de empresa: ve los resultados de sus empleados |
 
 ### Cuestionario público (sin login)
 

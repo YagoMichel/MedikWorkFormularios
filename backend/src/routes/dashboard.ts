@@ -22,10 +22,12 @@ router.get('/admin', requireRole('ADMIN'), async (_req, res) => {
     prisma.appointment.count({ where: { date: { gte: today }, status: 'ATENDIDA' } }),
     prisma.appointment.count({ where: { date: { gte: yesterday, lt: today }, status: 'ATENDIDA' } }),
     prisma.product.count({ where: { active: true } }),
-    prisma.$queryRawUnsafe<any[]>(`
+    // Template etiquetado ($queryRaw): Prisma parametriza el ${...} automáticamente.
+    // Se evita $queryRawUnsafe para que nadie concatene entrada sin darse cuenta.
+    prisma.$queryRaw<any[]>`
       SELECT date_trunc('day', "createdAt")::date as day, COALESCE(SUM(total),0)::float as total
-      FROM "Sale" WHERE "createdAt" >= $1 AND status != 'CANCELADA'
-      GROUP BY day ORDER BY day ASC`, new Date(today.getTime() - 30 * 86400000)),
+      FROM "Sale" WHERE "createdAt" >= ${new Date(today.getTime() - 30 * 86400000)} AND status != 'CANCELADA'
+      GROUP BY day ORDER BY day ASC`,
     prisma.saleItem.groupBy({
       by: ['productId'],
       where: { sale: { createdAt: { gte: monthStart }, status: { not: 'CANCELADA' } } },
@@ -174,7 +176,7 @@ router.get('/reportes', requireRole('ADMIN'), async (_req, res) => {
   const totalCitasAnio = citasMes.reduce((sum: number, c: any) => sum + c.citas, 0);
   const totalTrabajadoresAnio = citasMes.reduce((sum: number, c: any) => sum + c.trabajadores, 0);
 
-  const ROLE_LABELS: Record<string, string> = { ADMIN: 'Admin', DOCTOR: 'Doctor', PACIENTE: 'Paciente', AGENT: 'Agente' };
+  const ROLE_LABELS: Record<string, string> = { ADMIN: 'Admin', DOCTOR: 'Doctor', PACIENTE_TABLET: 'Tablet', AGENT: 'Agente' };
   // AGENT es cuenta de servicio y MASTER es un rol privado: ninguno debe
   // aparecer en la gráfica de usuarios por rol.
   const usuariosPastel = usuariosPorRol

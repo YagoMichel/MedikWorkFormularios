@@ -16,12 +16,30 @@ export interface AuthRequest extends Request {
   user?: { id: string; role: Role; email: string };
 }
 
-// Leer el secreto desde variables de entorno (definido en .env)
+// Leer el secreto desde variables de entorno (definido en .env).
+// En producción es obligatorio: un secreto por defecto permitiría a cualquiera
+// firmar sus propios tokens y entrar como ADMIN.
+if (!process.env.JWT_SECRET && process.env.NODE_ENV === 'production') {
+  throw new Error('JWT_SECRET no está definido — es obligatorio en producción');
+}
+if (!process.env.JWT_SECRET) {
+  console.warn('[auth] JWT_SECRET no definido — usando secreto de desarrollo (NO usar en producción)');
+}
 const SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 
-// Genera un token JWT con duracion de 30 dias
+// Nombre de la cookie httpOnly que acompaña al token del header. Existe para
+// que recursos cargados sin JavaScript (ej. <img src="/uploads/...">) puedan
+// autenticarse: el navegador la manda solo porque todo va por el mismo origen.
+export const AUTH_COOKIE = 'mw_token';
+
+// Duración de la sesión. Se acorta a 12h (antes 30 días) por ser un sistema con
+// datos sensibles de salud: sesiones acotadas según LFPDPPP/NOM-024. Ajustable
+// con SESSION_TTL (formato de `jsonwebtoken`, ej. '12h', '8h', '1d').
+export const SESSION_TTL = process.env.SESSION_TTL || '12h';
+
+// Genera un token JWT con la duración de SESSION_TTL
 export function signToken(payload: { id: string; role: Role; email: string }) {
-  return jwt.sign(payload, SECRET, { expiresIn: '30d' });
+  return jwt.sign(payload, SECRET, { expiresIn: SESSION_TTL as any });
 }
 
 // Middleware: rechaza peticiones sin token valido en el header Authorization
@@ -30,6 +48,22 @@ export function authRequired(req: AuthRequest, res: Response, next: NextFunction
   if (!auth?.startsWith('Bearer ')) return res.status(401).json({ error: 'No token' });
   try {
     const decoded = jwt.verify(auth.slice(7), SECRET) as any;
+    req.user = { id: decoded.id, role: decoded.role, email: decoded.email };
+    next();
+  } catch {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+}
+
+// Variante para archivos estáticos (/uploads): acepta el token del header
+// Authorization O de la cookie httpOnly (los <img src> del navegador no pueden
+// mandar headers, pero la cookie viaja sola al ser el mismo origen).
+export function authRequiredCookieOrHeader(req: AuthRequest, res: Response, next: NextFunction) {
+  const auth = req.headers.authorization;
+  const token = auth?.startsWith('Bearer ') ? auth.slice(7) : (req as any).cookies?.[AUTH_COOKIE];
+  if (!token) return res.status(401).json({ error: 'No token' });
+  try {
+    const decoded = jwt.verify(token, SECRET) as any;
     req.user = { id: decoded.id, role: decoded.role, email: decoded.email };
     next();
   } catch {

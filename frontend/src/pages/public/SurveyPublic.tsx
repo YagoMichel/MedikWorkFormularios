@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import toast from 'react-hot-toast';
+import { TurnstileWidget, TURNSTILE_SITE_KEY } from '../../components/TurnstileWidget';
 
 const ENFERMEDADES_FAM = ['Diabetes','Hipertensión','Cardiopatía','Cáncer','Epilepsia','Artritis','Depresión','Obesidad','Asma','Tuberculosis','Otros'];
 const PATOLOGICOS = ['Diabetes','Hipertensión','Cardiopatía','Cáncer','Epilepsia','Artritis','Depresión','Fractura','Cirugía','Alergias','Asma','Tuberculosis'];
@@ -25,10 +26,21 @@ const EMPTY: any = {
   antecedentesPatologicos: PATOLOGICOS.map((c) => ({ condicion: c, si: false, especifique: '' })),
 };
 
-export default function SurveyPublic() {
+interface Props {
+  // 'public' (por defecto): crea un paciente nuevo vía /public/survey.
+  // 'portal': el paciente logueado llena SU encuesta — se pasa onSubmitOverride.
+  mode?: 'public' | 'portal';
+  onSubmitOverride?: (data: any) => Promise<void>;
+  title?: string;
+  subtitle?: string;
+}
+
+export default function SurveyPublic({ mode = 'public', onSubmitOverride, title, subtitle }: Props = {}) {
   const [f, setF] = useState<any>({ ...EMPTY });
   const [done, setDone] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [captcha, setCaptcha] = useState('');
+  const isPortal = mode === 'portal';
   const [companies, setCompanies] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
@@ -62,9 +74,14 @@ export default function SurveyPublic() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!f.nombre.trim()) { toast.error('El nombre es requerido'); return; }
+    if (!isPortal && TURNSTILE_SITE_KEY && !captcha) { toast.error('Completa la verificación de seguridad'); return; }
     setSaving(true);
     try {
-      await api.post('/public/survey', f);
+      if (onSubmitOverride) {
+        await onSubmitOverride(f);
+      } else {
+        await api.post('/public/survey', { ...f, turnstileToken: captcha || undefined });
+      }
       setDone(true);
     } catch {
       toast.error('Error al enviar. Intenta de nuevo.');
@@ -89,8 +106,8 @@ export default function SurveyPublic() {
     <div className="min-h-screen bg-slate-50 py-8 px-4">
       <div className="max-w-2xl mx-auto space-y-5">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-extrabold text-slate-800">Cuestionario de salud</h1>
-          <p className="text-slate-500 text-sm mt-1">Por favor completa todos los datos antes de tu examen médico.</p>
+          <h1 className="text-2xl font-extrabold text-slate-800">{title || 'Cuestionario de salud'}</h1>
+          <p className="text-slate-500 text-sm mt-1">{subtitle || 'Por favor completa todos los datos antes de tu examen médico.'}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
@@ -262,6 +279,8 @@ export default function SurveyPublic() {
               + Agregar empleo
             </button>
           </div>
+
+          {!isPortal && <TurnstileWidget onToken={setCaptcha} />}
 
           <button type="submit" disabled={saving} className="w-full py-3 rounded-xl text-white font-bold text-sm transition" style={{ background: '#3375c8' }}>
             {saving ? 'Enviando…' : 'Enviar cuestionario'}

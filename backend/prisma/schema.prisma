@@ -13,8 +13,19 @@ enum Role {
   ADMIN
   DOCTOR
   AGENT
-  PACIENTE
+  PACIENTE_TABLET   // kiosco de la tablet (solo la encuesta)
+  PACIENTE          // portal del paciente (ve su propio expediente)
+  EMPRESA           // portal de empresa (ve resultados de sus empleados)
   MASTER
+}
+
+// Tokens de un solo uso para activación de cuenta (empresa) y verificación
+// de correo (paciente). Se guarda solo el hash del token; el token en claro
+// viaja únicamente en el enlace del correo.
+enum AuthTokenType {
+  ACTIVATION          // empresa define su contraseña por primera vez
+  EMAIL_VERIFICATION  // paciente confirma que el correo es suyo
+  PASSWORD_RESET      // cualquier cuenta restablece su contraseña olvidada
 }
 
 enum AppointmentStatus {
@@ -91,6 +102,17 @@ model User {
   role          Role
   photoUrl      String?
   active        Boolean        @default(true)
+  // true una vez que el correo fue verificado (paciente) o la cuenta activada
+  // (empresa). Los roles internos (ADMIN/DOCTOR/etc.) se crean ya verificados.
+  emailVerified Boolean        @default(false)
+  // Portal del paciente: liga (uno a uno) al registro clínico. Puede asignarlo
+  // el personal o crearse automáticamente al enviar la primera encuesta.
+  patientId     String?        @unique
+  patient       Patient?       @relation("PatientPortalUser", fields: [patientId], references: [id])
+  // Portal de empresa: liga a la empresa cuyos resultados puede ver.
+  companyId     String?
+  company       Company?       @relation("CompanyPortalUsers", fields: [companyId], references: [id])
+  authTokens    AuthToken[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   appointments  Appointment[]  @relation("DoctorAppointments")
@@ -99,6 +121,63 @@ model User {
   abonos        Abono[]        @relation("UserAbonos")
   movements     Movement[]
   uploadedDocuments Document[]
+
+  @@index([companyId])
+}
+
+model AuthToken {
+  id        String        @id @default(cuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String        @unique
+  type      AuthTokenType
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime      @default(now())
+
+  @@index([userId])
+}
+
+// Bitácora de auditoría (LFPDPPP / NOM-024-SSA3-2012): registra accesos al
+// sistema y operaciones sobre datos sensibles (consulta, alta, modificación,
+// descarga, borrado). Es solo-append: no se edita ni se borra desde la app.
+enum AuditAction {
+  LOGIN_SUCCESS
+  LOGIN_FAILED
+  LOGOUT
+  DOCUMENT_UPLOAD
+  DOCUMENT_DOWNLOAD      // preview + descarga de portal + expediente completo
+  DOCUMENT_DELETE
+  EXPEDIENTE_VIEW        // consulta/listado del expediente documental de un paciente
+  PATIENT_VIEW           // apertura de la ficha de un paciente
+  USER_CREATE
+  USER_UPDATE
+  USER_DELETE
+  PASSWORD_CHANGE
+  ROLE_CHANGE
+}
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  action     AuditAction
+  // Snapshot del actor: se conservan email/rol aunque el usuario se borre luego,
+  // y userId queda null en login fallido (todavía no sabemos quién es). Por eso
+  // userId NO lleva relación con onDelete: Cascade — la bitácora sobrevive.
+  userId     String?
+  userEmail  String?
+  userRole   Role?
+  targetType String?     // "Document" | "Patient" | "User"
+  targetId   String?
+  patientId  String?     // a qué paciente pertenece el dato accedido (clave clínica)
+  detail     String?     // texto/JSON corto: nombre de archivo, campos cambiados, motivo del fallo
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime    @default(now())
+
+  @@index([createdAt])
+  @@index([userId])
+  @@index([patientId])
+  @@index([action])
 }
 
 model Patient {
@@ -128,6 +207,8 @@ model Patient {
   surveys       PatientSurvey[]
   medicalExams  MedicalExam[]
   documents     Document[]
+  // Cuenta de portal ligada a este expediente (uno a uno, opcional)
+  portalUser    User?          @relation("PatientPortalUser")
 
   @@index([companyId])
   @@index([nss])
@@ -207,6 +288,17 @@ model Document {
   fileUrl      String
   uploadedById String?
   uploadedBy   User?        @relation(fields: [uploadedById], references: [id])
+  // Solo los documentos aprobados expresamente por un DOCTOR aparecen en el
+  // portal de la empresa. Los existentes y nuevos son privados por defecto.
+  companyVisible      Boolean   @default(false)
+  companyApprovedById String?
+  companyApprovedAt   DateTime?
+  // Igual para el portal del PACIENTE: en salud ocupacional los resultados se
+  // liberan solo tras validación/interpretación del médico (NOM-004). Privado
+  // por defecto — el paciente no ve el documento hasta que un DOCTOR lo libera.
+  patientVisible      Boolean   @default(false)
+  patientApprovedById String?
+  patientApprovedAt   DateTime?
   createdAt    DateTime     @default(now())
   cloudProvider String?     // "google" | "onedrive" — null si no se sincronizó
   cloudFileId   String?
@@ -281,6 +373,8 @@ model Company {
   patients    Patient[]
   batches     CompanyBatch[]
   profiles    CompanyProfile[]
+  // Cuentas de portal de esta empresa (ven resultados de sus empleados)
+  portalUsers User[]         @relation("CompanyPortalUsers")
 }
 
 model Category {

@@ -14,6 +14,7 @@ import { PDFDocument } from 'pdf-lib';
 import { prisma } from '../prisma';
 import { authRequired, requireRole, AuthRequest } from '../middleware/auth';
 import { getCloudStorageProvider, buildPatientFolderPath } from '../services/storage';
+import { logAudit } from '../services/audit';
 
 const router = Router();
 router.use(authRequired, requireRole('ADMIN', 'DOCTOR'));
@@ -24,12 +25,15 @@ if (!fs.existsSync(DOCS_DIR)) fs.mkdirSync(DOCS_DIR, { recursive: true });
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
 
 // GET /api/documents — listar, filtrable por patientId / companyId / type
-router.get('/', async (req, res) => {
+router.get('/', async (req: AuthRequest, res) => {
   const { patientId, companyId, type } = req.query as Record<string, string | undefined>;
   const where: any = {};
   if (patientId) where.patientId = patientId;
   if (type) where.type = type;
   if (companyId) where.patient = { companyId };
+
+  // Consulta del expediente documental de un paciente = acceso a datos sensibles.
+  if (patientId) logAudit(req, 'EXPEDIENTE_VIEW', { targetType: 'Patient', targetId: patientId, patientId });
 
   const docs = await prisma.document.findMany({
     where,
@@ -40,6 +44,39 @@ router.get('/', async (req, res) => {
     orderBy: { visitDate: 'desc' },
   });
   res.json(docs);
+});
+
+// GET /api/documents/company-review — bandeja central para que DOCTOR/MASTER
+// revisen archivos de pacientes vinculados a empresas y decidan su visibilidad.
+router.get('/company-review', requireRole('DOCTOR', 'MASTER'), async (_req, res) => {
+  const patients = await prisma.patient.findMany({
+    where: {
+      AND: [
+        { OR: [{ companyId: { not: null } }, { company: { not: null } }] },
+        { documents: { some: {} } },
+      ],
+    },
+    select: {
+      id: true,
+      fullName: true,
+      nss: true,
+      company: true,
+      companyRel: { select: { id: true, name: true } },
+      documents: {
+        select: {
+          id: true,
+          type: true,
+          fileName: true,
+          visitDate: true,
+          companyVisible: true,
+          companyApprovedAt: true,
+        },
+        orderBy: { visitDate: 'desc' },
+      },
+    },
+    orderBy: { fullName: 'asc' },
+  });
+  res.json(patients);
 });
 
 // POST /api/documents/upload — sube un archivo directo a la nube (OneDrive/
@@ -95,12 +132,100 @@ router.post('/upload', upload.single('file'), async (req: AuthRequest, res) => {
       cloudWebUrl,
     },
   });
+  logAudit(req, 'DOCUMENT_UPLOAD', { targetType: 'Document', targetId: doc.id, patientId, detail: `${type}: ${req.file.originalname}` });
   res.status(201).json(doc);
+});
+
+// GET /api/documents/:id/preview — vista previa autenticada para DOCTOR/MASTER.
+// El médico puede revisar el archivo antes de decidir si lo autoriza para la empresa.
+router.get('/:id/preview', requireRole('DOCTOR', 'MASTER'), async (req: AuthRequest, res) => {
+  const document = await prisma.document.findUnique({ where: { id: req.params.id } });
+  if (!document) return res.status(404).json({ error: 'Documento no encontrado' });
+  logAudit(req, 'DOCUMENT_DOWNLOAD', { targetType: 'Document', targetId: document.id, patientId: document.patientId, detail: `preview: ${document.fileName}` });
+
+  const extension = path.extname(document.fileName).toLowerCase();
+  const contentTypes: Record<string, string> = {
+    '.pdf': 'application/pdf',
+    '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+    '.webp': 'image/webp', '.gif': 'image/gif',
+    '.txt': 'text/plain; charset=utf-8',
+  };
+  const setPreviewHeaders = () => {
+    res.setHeader('Content-Type', contentTypes[extension] || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(document.fileName)}`);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+  };
+
+  if (document.cloudFileId) {
+    const provider = getCloudStorageProvider();
+    if (!provider) return res.status(503).json({ error: 'Proveedor de nube no disponible' });
+    const bytes = await provider.downloadFile(document.cloudFileId);
+    setPreviewHeaders();
+    return res.send(Buffer.from(bytes));
+  }
+
+  const relativePath = document.fileUrl.replace(/^\/uploads\//, '');
+  const localPath = path.resolve(UPLOAD_DIR, relativePath);
+  const uploadsRoot = `${path.resolve(UPLOAD_DIR)}${path.sep}`;
+  if (!localPath.startsWith(uploadsRoot) || !fs.existsSync(localPath)) {
+    return res.status(404).json({ error: 'Archivo no disponible' });
+  }
+  setPreviewHeaders();
+  return res.sendFile(localPath);
+});
+
+// PATCH /api/documents/:id/company-visibility — únicamente un DOCTOR decide
+// qué archivo específico puede consultar la empresa del paciente.
+router.patch('/:id/company-visibility', requireRole('DOCTOR', 'MASTER'), async (req: AuthRequest, res) => {
+  if (typeof req.body?.visible !== 'boolean') return res.status(400).json({ error: 'visible debe ser booleano' });
+  const existing = await prisma.document.findUnique({
+    where: { id: req.params.id },
+    include: { patient: { select: { companyId: true, company: true } } },
+  });
+  if (!existing) return res.status(404).json({ error: 'Documento no encontrado' });
+  if (!existing.patient.companyId && !existing.patient.company) {
+    return res.status(400).json({ error: 'El paciente no tiene una empresa vinculada' });
+  }
+
+  const document = await prisma.document.update({
+    where: { id: existing.id },
+    data: {
+      companyVisible: req.body.visible,
+      companyApprovedById: req.body.visible ? req.user!.id : null,
+      companyApprovedAt: req.body.visible ? new Date() : null,
+    },
+  });
+  res.json(document);
+});
+
+// PATCH /api/documents/:id/patient-visibility — únicamente un DOCTOR decide qué
+// documento puede ver el paciente en su portal. En salud ocupacional los
+// resultados se liberan tras validación médica (NOM-004): privado por defecto.
+router.patch('/:id/patient-visibility', requireRole('DOCTOR', 'MASTER'), async (req: AuthRequest, res) => {
+  if (typeof req.body?.visible !== 'boolean') return res.status(400).json({ error: 'visible debe ser booleano' });
+  const existing = await prisma.document.findUnique({ where: { id: req.params.id } });
+  if (!existing) return res.status(404).json({ error: 'Documento no encontrado' });
+
+  const document = await prisma.document.update({
+    where: { id: existing.id },
+    data: {
+      patientVisible: req.body.visible,
+      patientApprovedById: req.body.visible ? req.user!.id : null,
+      patientApprovedAt: req.body.visible ? new Date() : null,
+    },
+  });
+  // Liberar/revocar resultados al paciente es un evento de acceso a datos
+  // sensibles → queda en la bitácora.
+  logAudit(req, 'EXPEDIENTE_VIEW', {
+    targetType: 'Document', targetId: existing.id, patientId: existing.patientId,
+    detail: req.body.visible ? `liberar al paciente: ${existing.fileName}` : `revocar al paciente: ${existing.fileName}`,
+  });
+  res.json(document);
 });
 
 // DELETE /api/documents/:id — borra un documento duplicado/obsoleto (registro
 // + archivo, en disco local o en la nube según donde viva)
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', async (req: AuthRequest, res) => {
   const doc = await prisma.document.findUnique({ where: { id: req.params.id } });
   if (!doc) return res.status(404).json({ error: 'Documento no encontrado' });
 
@@ -119,6 +244,7 @@ router.delete('/:id', async (req, res) => {
     if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
   }
   await prisma.document.delete({ where: { id: doc.id } });
+  logAudit(req, 'DOCUMENT_DELETE', { targetType: 'Document', targetId: doc.id, patientId: doc.patientId, detail: doc.fileName });
   res.json({ ok: true });
 });
 
@@ -126,12 +252,13 @@ router.delete('/:id', async (req, res) => {
 // archivos de la carpeta de ese paciente en la nube (Google Drive/OneDrive,
 // según CLOUD_STORAGE_PROVIDER), incluyendo los que alguien haya subido ahí
 // directo, por fuera de esta app. Sin fecha, usa la visita más reciente.
-router.get('/:patientId/cloud-files', async (req, res) => {
+router.get('/:patientId/cloud-files', async (req: AuthRequest, res) => {
   const provider = getCloudStorageProvider();
   if (!provider) return res.json({ configured: false, files: [] });
 
   const { patientId } = req.params;
   const { date } = req.query as { date?: string };
+  logAudit(req, 'EXPEDIENTE_VIEW', { targetType: 'Patient', targetId: patientId, patientId, detail: 'listado carpeta nube' });
 
   const patient = await prisma.patient.findUnique({ where: { id: patientId }, select: { fullName: true } });
   if (!patient) return res.status(404).json({ error: 'Paciente no encontrado' });
@@ -161,11 +288,12 @@ router.get('/:patientId/cloud-files', async (req, res) => {
 // fuera de esta app, que es justo lo que lista GET /cloud-files). Si además
 // hay un `Document` apuntando a ese mismo archivo, se borra también para no
 // dejar un registro huérfano.
-router.delete('/cloud-file/:fileId', async (req, res) => {
+router.delete('/cloud-file/:fileId', async (req: AuthRequest, res) => {
   const provider = getCloudStorageProvider();
   if (!provider) return res.status(400).json({ error: 'La nube no está configurada' });
 
   const { fileId } = req.params;
+  const linked = await prisma.document.findFirst({ where: { cloudFileId: fileId }, select: { patientId: true, fileName: true } });
   try {
     await provider.deleteFile(fileId);
   } catch (err: any) {
@@ -173,6 +301,7 @@ router.delete('/cloud-file/:fileId', async (req, res) => {
     return res.status(502).json({ error: 'No se pudo borrar el archivo de la nube' });
   }
   await prisma.document.deleteMany({ where: { cloudFileId: fileId } });
+  logAudit(req, 'DOCUMENT_DELETE', { targetType: 'Document', targetId: fileId, patientId: linked?.patientId ?? null, detail: linked?.fileName ?? 'archivo en nube' });
   res.json({ ok: true });
 });
 
@@ -197,13 +326,14 @@ const ordenPorNombre = (name: string) => {
 // Así también incluye archivos que alguien haya puesto ahí directo, por
 // fuera de la app. El PDF combinado nunca toca disco: se arma en memoria y
 // se manda tanto a la respuesta como de vuelta a la misma carpeta en la nube.
-router.get('/:patientId/completo', async (req, res) => {
+router.get('/:patientId/completo', async (req: AuthRequest, res) => {
   const { patientId } = req.params;
   const { date, force } = req.query as { date?: string; force?: string };
   const forzarReconstruccion = force === '1' || force === 'true';
 
   const patient = await prisma.patient.findUnique({ where: { id: patientId }, select: { fullName: true } });
   if (!patient) return res.status(404).json({ error: 'Paciente no encontrado' });
+  logAudit(req, 'DOCUMENT_DOWNLOAD', { targetType: 'Patient', targetId: patientId, patientId, detail: `expediente completo${date ? ` ${date}` : ''}` });
 
   const provider = getCloudStorageProvider();
 

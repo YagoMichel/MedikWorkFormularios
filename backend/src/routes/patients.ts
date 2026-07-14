@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../prisma';
 import { authRequired, AuthRequest } from '../middleware/auth';
 import { emit } from '../socket';
+import { logAudit } from '../services/audit';
 
 const router = Router();
 router.use(authRequired);
@@ -22,6 +23,15 @@ const patientSchema = z.object({
 });
 
 const SIN_EMPRESA = '__sin_empresa__';
+
+async function companyIdForName(company: unknown): Promise<string | null> {
+  if (typeof company !== 'string' || !company.trim() || company === 'Sin empresa') return null;
+  const match = await prisma.company.findFirst({
+    where: { name: { equals: company.trim(), mode: 'insensitive' } },
+    select: { id: true },
+  });
+  return match?.id ?? null;
+}
 
 // Quita acentos/diacríticos para que la búsqueda "Maria" también encuentre "María"
 const normalizar = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -53,7 +63,7 @@ router.get('/', async (req, res) => {
   res.json(patients);
 });
 
-router.get('/:id', async (req, res) => {
+router.get('/:id', async (req: AuthRequest, res) => {
   const p = await prisma.patient.findUnique({
     where: { id: req.params.id },
     include: {
@@ -64,6 +74,7 @@ router.get('/:id', async (req, res) => {
     },
   });
   if (!p) return res.status(404).json({ error: 'No encontrado' });
+  logAudit(req, 'PATIENT_VIEW', { targetType: 'Patient', targetId: p.id, patientId: p.id });
   res.json(p);
 });
 
@@ -74,6 +85,7 @@ router.post('/', async (req: AuthRequest, res) => {
   if (data.birthDate === '') data.birthDate = null;
   if (data.birthDate) data.birthDate = new Date(data.birthDate);
   if (data.email === '') data.email = null;
+  data.companyId = await companyIdForName(data.company);
   const p = await prisma.patient.create({ data });
   emit('patient:created', p);
   res.status(201).json(p);
@@ -85,6 +97,7 @@ router.put('/:id', async (req, res) => {
   const data: any = { ...parsed.data };
   if (data.birthDate === '') data.birthDate = null;
   if (data.birthDate) data.birthDate = new Date(data.birthDate);
+  if (Object.prototype.hasOwnProperty.call(data, 'company')) data.companyId = await companyIdForName(data.company);
   const p = await prisma.patient.update({ where: { id: req.params.id }, data });
   emit('patient:updated', p);
   res.json(p);

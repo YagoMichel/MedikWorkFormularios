@@ -4,7 +4,7 @@ import { api } from '../../services/api';
 import { useState, useEffect, useRef } from 'react';
 import { useAuth, isAdminRole } from '../../stores/auth';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Eye, ArrowDown, HeartPulse, Droplet, FlaskConical, Baby, Stethoscope, Activity, Bone, FileDown, CheckCircle2, AlertCircle, FileStack, ChevronDown, ChevronRight, Trash2, Plus, FileText, CloudUpload } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, ArrowDown, HeartPulse, Droplet, FlaskConical, Baby, Stethoscope, Activity, Bone, FileDown, CheckCircle2, AlertCircle, FileStack, ChevronDown, ChevronRight, Trash2, Plus, FileText, CloudUpload } from 'lucide-react';
 import { SurveyEditorForm } from '../../components/SurveyEditorForm';
 import { buildSurveyPdfBlob } from '../../utils/surveyPdf';
 import { buildExamPdfBlob } from '../../utils/examPdf';
@@ -660,6 +660,7 @@ const ACCEPT_ARCHIVOS = 'image/*,.pdf,.xls,.xlsx,.doc,.docx';
 
 function DocumentosTab({ survey, patient }: { survey: any; patient: any }) {
   const qc = useQueryClient();
+  const user = useAuth((s) => s.user);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const otroFileRef = useRef<HTMLInputElement>(null);
   const perfilFileRef = useRef<HTMLInputElement>(null);
@@ -667,6 +668,8 @@ function DocumentosTab({ survey, patient }: { survey: any; patient: any }) {
   const [etiquetaOtro, setEtiquetaOtro] = useState('');
   const [subiendoOtro, setSubiendoOtro] = useState(false);
   const [itemPendiente, setItemPendiente] = useState<any>(null);
+  const [changingVisibilityId, setChangingVisibilityId] = useState<string | null>(null);
+  const [changingPatientVisibilityId, setChangingPatientVisibilityId] = useState<string | null>(null);
 
   const { data: docs = [] } = useQuery({
     queryKey: ['documents', patient.id],
@@ -721,6 +724,32 @@ function DocumentosTab({ survey, patient }: { survey: any; patient: any }) {
     await api.post('/documents/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } });
     qc.invalidateQueries({ queryKey: ['documents', patient.id] });
     qc.invalidateQueries({ queryKey: ['documents-cloud-files', patient.id] });
+  };
+
+  const setCompanyVisibility = async (document: any) => {
+    setChangingVisibilityId(document.id);
+    try {
+      await api.patch(`/documents/${document.id}/company-visibility`, { visible: !document.companyVisible });
+      await qc.invalidateQueries({ queryKey: ['documents', patient.id] });
+      toast.success(document.companyVisible ? 'Acceso de la empresa revocado' : 'Archivo autorizado para la empresa');
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'No se pudo cambiar la autorización');
+    } finally {
+      setChangingVisibilityId(null);
+    }
+  };
+
+  const setPatientVisibility = async (document: any) => {
+    setChangingPatientVisibilityId(document.id);
+    try {
+      await api.patch(`/documents/${document.id}/patient-visibility`, { visible: !document.patientVisible });
+      await qc.invalidateQueries({ queryKey: ['documents', patient.id] });
+      toast.success(document.patientVisible ? 'Resultado ocultado al paciente' : 'Resultado liberado al paciente');
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'No se pudo cambiar la autorización');
+    } finally {
+      setChangingPatientVisibilityId(null);
+    }
   };
 
   // Checklist de estudios del perfil de empresa asignado al paciente (ver
@@ -1059,6 +1088,72 @@ function DocumentosTab({ survey, patient }: { survey: any; patient: any }) {
           )
         )}
       </div>
+
+      {(user?.role === 'DOCTOR' || user?.role === 'MASTER') && (
+        <div className="card space-y-3">
+          <div>
+            <h4 className="font-semibold text-sm">Visibilidad para la empresa</h4>
+            <p className="text-xs text-slate-400 mt-1">Selecciona individualmente los archivos que podrá consultar la empresa de este paciente.</p>
+          </div>
+          {docs.length === 0 ? (
+            <p className="text-xs text-slate-400">Todavía no hay documentos registrados para autorizar.</p>
+          ) : (
+            <div className="space-y-2">
+              {docs.map((document: any) => (
+                <div key={document.id} className="flex items-center gap-3 rounded-xl border border-slate-100 dark:border-slate-700 p-3">
+                  {document.companyVisible
+                    ? <Eye size={17} className="text-emerald-600 shrink-0" />
+                    : <EyeOff size={17} className="text-slate-400 shrink-0" />}
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium truncate">{document.fileName}</div>
+                    <div className="text-xs text-slate-400">{DOC_OBLIGATORIOS.find((item) => item.type === document.type)?.label || 'Otro documento'} · {new Date(document.visitDate).toLocaleDateString('es-MX')}</div>
+                  </div>
+                  <button type="button" onClick={() => setCompanyVisibility(document)}
+                    disabled={changingVisibilityId === document.id}
+                    className={`btn text-xs whitespace-nowrap ${document.companyVisible ? 'btn-secondary' : 'btn-primary'}`}>
+                    {changingVisibilityId === document.id
+                      ? 'Guardando…'
+                      : document.companyVisible ? 'Revocar acceso' : 'Autorizar archivo'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {(user?.role === 'DOCTOR' || user?.role === 'MASTER') && (
+        <div className="card space-y-3">
+          <div>
+            <h4 className="font-semibold text-sm">Visibilidad para el paciente</h4>
+            <p className="text-xs text-slate-400 mt-1">Libera individualmente los resultados que el paciente podrá ver en su portal. En salud ocupacional se recomienda liberar solo lo ya validado por el médico.</p>
+          </div>
+          {docs.length === 0 ? (
+            <p className="text-xs text-slate-400">Todavía no hay documentos registrados para liberar.</p>
+          ) : (
+            <div className="space-y-2">
+              {docs.map((document: any) => (
+                <div key={document.id} className="flex items-center gap-3 rounded-xl border border-slate-100 dark:border-slate-700 p-3">
+                  {document.patientVisible
+                    ? <Eye size={17} className="text-emerald-600 shrink-0" />
+                    : <EyeOff size={17} className="text-slate-400 shrink-0" />}
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium truncate">{document.fileName}</div>
+                    <div className="text-xs text-slate-400">{DOC_OBLIGATORIOS.find((item) => item.type === document.type)?.label || 'Otro documento'} · {new Date(document.visitDate).toLocaleDateString('es-MX')}</div>
+                  </div>
+                  <button type="button" onClick={() => setPatientVisibility(document)}
+                    disabled={changingPatientVisibilityId === document.id}
+                    className={`btn text-xs whitespace-nowrap ${document.patientVisible ? 'btn-secondary' : 'btn-primary'}`}>
+                    {changingPatientVisibilityId === document.id
+                      ? 'Guardando…'
+                      : document.patientVisible ? 'Ocultar al paciente' : 'Liberar al paciente'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {(cloudHoy?.configured ? archivosCloudHoy.length > 0 : docs.length > 0) && (
         <button onClick={handleCompleto} className="btn btn-primary text-sm flex items-center gap-2">
