@@ -591,7 +591,8 @@ function NuevaCuenta() {
           <div className="relative" ref={productRef}>
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
-              className="input pl-9"
+              className="input"
+              style={{ paddingLeft: '2.25rem' }}
               placeholder="Buscar por nombre…"
               value={productSearch}
               onChange={(e) => { setProductSearch(e.target.value); setShowProductDrop(true); }}

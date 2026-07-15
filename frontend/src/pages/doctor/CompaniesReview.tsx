@@ -95,7 +95,7 @@ export default function CompaniesReview() {
 
       <div className="relative">
         <Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-        <input className="input pl-10" placeholder="Buscar empresa o paciente por nombre…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <input className="input" style={{ paddingLeft: '2.5rem' }} placeholder="Buscar empresa o paciente por nombre…" value={search} onChange={(e) => setSearch(e.target.value)} />
       </div>
 
       {isLoading && <div className="card text-sm text-slate-400">Cargando archivos…</div>}
