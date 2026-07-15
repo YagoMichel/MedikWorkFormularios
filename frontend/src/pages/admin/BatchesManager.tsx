@@ -447,36 +447,9 @@ function SolicitudesWebTab() {
 }
 
 export default function BatchesManager() {
-  const [tab, setTab] = useState<'empresas' | 'web'>('empresas');
-
   return (
     <div className="space-y-6 pt-2 max-w-7xl mx-auto">
-      <div className="flex gap-2">
-        <button
-          className={`px-6 py-2.5 text-sm font-extrabold rounded-xl transition-all ${
-            tab === 'empresas'
-              ? 'bg-[#2560aa] text-white shadow-lg shadow-[#2560aa]/30 hover:bg-[#1c4b85]'
-              : 'bg-white text-slate-500 border border-slate-200 hover:border-[#51abcd] hover:text-[#51abcd] hover:bg-slate-50'
-          }`}
-          onClick={() => setTab('empresas')}
-        >
-          Citas de empresa
-        </button>
-        <button
-          className={`px-6 py-2.5 text-sm font-extrabold rounded-xl transition-all ${
-            tab === 'web'
-              ? 'bg-[#2560aa] text-white shadow-lg shadow-[#2560aa]/30 hover:bg-[#1c4b85]'
-              : 'bg-white text-slate-500 border border-slate-200 hover:border-[#51abcd] hover:text-[#51abcd] hover:bg-slate-50'
-          }`}
-          onClick={() => setTab('web')}
-        >
-          Solicitudes web
-        </button>
-      </div>
-
-      <div className="transition-all">
-        {tab === 'web' ? <SolicitudesWebTab /> : <BatchesTab />}
-      </div>
+      <BatchesTab />
     </div>
   );
 }

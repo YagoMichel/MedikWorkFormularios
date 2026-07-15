@@ -660,7 +660,6 @@ const ACCEPT_ARCHIVOS = 'image/*,.pdf,.xls,.xlsx,.doc,.docx';
 
 function DocumentosTab({ survey, patient }: { survey: any; patient: any }) {
   const qc = useQueryClient();
-  const user = useAuth((s) => s.user);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const otroFileRef = useRef<HTMLInputElement>(null);
   const perfilFileRef = useRef<HTMLInputElement>(null);
@@ -668,8 +667,6 @@ function DocumentosTab({ survey, patient }: { survey: any; patient: any }) {
   const [etiquetaOtro, setEtiquetaOtro] = useState('');
   const [subiendoOtro, setSubiendoOtro] = useState(false);
   const [itemPendiente, setItemPendiente] = useState<any>(null);
-  const [changingVisibilityId, setChangingVisibilityId] = useState<string | null>(null);
-  const [changingPatientVisibilityId, setChangingPatientVisibilityId] = useState<string | null>(null);
 
   const { data: docs = [] } = useQuery({
     queryKey: ['documents', patient.id],
@@ -724,32 +721,6 @@ function DocumentosTab({ survey, patient }: { survey: any; patient: any }) {
     await api.post('/documents/upload', form, { headers: { 'Content-Type': 'multipart/form-data' } });
     qc.invalidateQueries({ queryKey: ['documents', patient.id] });
     qc.invalidateQueries({ queryKey: ['documents-cloud-files', patient.id] });
-  };
-
-  const setCompanyVisibility = async (document: any) => {
-    setChangingVisibilityId(document.id);
-    try {
-      await api.patch(`/documents/${document.id}/company-visibility`, { visible: !document.companyVisible });
-      await qc.invalidateQueries({ queryKey: ['documents', patient.id] });
-      toast.success(document.companyVisible ? 'Acceso de la empresa revocado' : 'Archivo autorizado para la empresa');
-    } catch (e: any) {
-      toast.error(e.response?.data?.error || 'No se pudo cambiar la autorización');
-    } finally {
-      setChangingVisibilityId(null);
-    }
-  };
-
-  const setPatientVisibility = async (document: any) => {
-    setChangingPatientVisibilityId(document.id);
-    try {
-      await api.patch(`/documents/${document.id}/patient-visibility`, { visible: !document.patientVisible });
-      await qc.invalidateQueries({ queryKey: ['documents', patient.id] });
-      toast.success(document.patientVisible ? 'Resultado ocultado al paciente' : 'Resultado liberado al paciente');
-    } catch (e: any) {
-      toast.error(e.response?.data?.error || 'No se pudo cambiar la autorización');
-    } finally {
-      setChangingPatientVisibilityId(null);
-    }
   };
 
   // Checklist de estudios del perfil de empresa asignado al paciente (ver
@@ -1089,72 +1060,6 @@ function DocumentosTab({ survey, patient }: { survey: any; patient: any }) {
         )}
       </div>
 
-      {(user?.role === 'DOCTOR' || user?.role === 'MASTER') && (
-        <div className="card space-y-3">
-          <div>
-            <h4 className="font-semibold text-sm">Visibilidad para la empresa</h4>
-            <p className="text-xs text-slate-400 mt-1">Selecciona individualmente los archivos que podrá consultar la empresa de este paciente.</p>
-          </div>
-          {docs.length === 0 ? (
-            <p className="text-xs text-slate-400">Todavía no hay documentos registrados para autorizar.</p>
-          ) : (
-            <div className="space-y-2">
-              {docs.map((document: any) => (
-                <div key={document.id} className="flex items-center gap-3 rounded-xl border border-slate-100 dark:border-slate-700 p-3">
-                  {document.companyVisible
-                    ? <Eye size={17} className="text-emerald-600 shrink-0" />
-                    : <EyeOff size={17} className="text-slate-400 shrink-0" />}
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium truncate">{document.fileName}</div>
-                    <div className="text-xs text-slate-400">{DOC_OBLIGATORIOS.find((item) => item.type === document.type)?.label || 'Otro documento'} · {new Date(document.visitDate).toLocaleDateString('es-MX')}</div>
-                  </div>
-                  <button type="button" onClick={() => setCompanyVisibility(document)}
-                    disabled={changingVisibilityId === document.id}
-                    className={`btn text-xs whitespace-nowrap ${document.companyVisible ? 'btn-secondary' : 'btn-primary'}`}>
-                    {changingVisibilityId === document.id
-                      ? 'Guardando…'
-                      : document.companyVisible ? 'Revocar acceso' : 'Autorizar archivo'}
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {(user?.role === 'DOCTOR' || user?.role === 'MASTER') && (
-        <div className="card space-y-3">
-          <div>
-            <h4 className="font-semibold text-sm">Visibilidad para el paciente</h4>
-            <p className="text-xs text-slate-400 mt-1">Libera individualmente los resultados que el paciente podrá ver en su portal. En salud ocupacional se recomienda liberar solo lo ya validado por el médico.</p>
-          </div>
-          {docs.length === 0 ? (
-            <p className="text-xs text-slate-400">Todavía no hay documentos registrados para liberar.</p>
-          ) : (
-            <div className="space-y-2">
-              {docs.map((document: any) => (
-                <div key={document.id} className="flex items-center gap-3 rounded-xl border border-slate-100 dark:border-slate-700 p-3">
-                  {document.patientVisible
-                    ? <Eye size={17} className="text-emerald-600 shrink-0" />
-                    : <EyeOff size={17} className="text-slate-400 shrink-0" />}
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium truncate">{document.fileName}</div>
-                    <div className="text-xs text-slate-400">{DOC_OBLIGATORIOS.find((item) => item.type === document.type)?.label || 'Otro documento'} · {new Date(document.visitDate).toLocaleDateString('es-MX')}</div>
-                  </div>
-                  <button type="button" onClick={() => setPatientVisibility(document)}
-                    disabled={changingPatientVisibilityId === document.id}
-                    className={`btn text-xs whitespace-nowrap ${document.patientVisible ? 'btn-secondary' : 'btn-primary'}`}>
-                    {changingPatientVisibilityId === document.id
-                      ? 'Guardando…'
-                      : document.patientVisible ? 'Ocultar al paciente' : 'Liberar al paciente'}
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
       {(cloudHoy?.configured ? archivosCloudHoy.length > 0 : docs.length > 0) && (
         <button onClick={handleCompleto} className="btn btn-primary text-sm flex items-center gap-2">
           <FileStack size={16} /> Generar expediente del día (PDF)
@@ -1203,7 +1108,16 @@ function agruparPorFecha(docs: any[]) {
 // Vista de "carpetas": Año y mes → Día → expediente de esa visita, tal como se organizan en OneDrive
 function HistorialPorFecha({ patient, docs }: { patient: any; docs: any[] }) {
   const qc = useQueryClient();
+  const user = useAuth((s) => s.user);
   const [abierto, setAbierto] = useState<string | null>(null);
+  const [changingVisibilityId, setChangingVisibilityId] = useState<string | null>(null);
+  const [changingPatientVisibilityId, setChangingPatientVisibilityId] = useState<string | null>(null);
+
+  // Quién puede visibilizar archivos, y a quién (empresa/paciente) según los
+  // datos del paciente. El backend valida los mismos roles en /documents/:id/*-visibility.
+  const puedeAutorizar = user?.role === 'DOCTOR' || isAdminRole(user?.role);
+  const tieneEmpresa = !!(patient.companyId || patient.company);
+  const tieneCorreo = !!patient.email;
 
   // Carpeta de esa fecha en OneDrive/Google Drive, en vivo — incluye archivos
   // subidos directo ahí, no solo los que pasaron por esta app. Solo se pide
@@ -1213,6 +1127,32 @@ function HistorialPorFecha({ patient, docs }: { patient: any; docs: any[] }) {
     queryFn: async () => (await api.get(`/documents/${patient.id}/cloud-files`, { params: { date: abierto } })).data,
     enabled: !!abierto,
   });
+
+  const setCompanyVisibility = async (doc: any) => {
+    setChangingVisibilityId(doc.id);
+    try {
+      await api.patch(`/documents/${doc.id}/company-visibility`, { visible: !doc.companyVisible });
+      await qc.invalidateQueries({ queryKey: ['documents', patient.id] });
+      toast.success(doc.companyVisible ? 'Archivo ocultado a la empresa' : 'Archivo visible para la empresa');
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'No se pudo cambiar la visibilidad');
+    } finally {
+      setChangingVisibilityId(null);
+    }
+  };
+
+  const setPatientVisibility = async (doc: any) => {
+    setChangingPatientVisibilityId(doc.id);
+    try {
+      await api.patch(`/documents/${doc.id}/patient-visibility`, { visible: !doc.patientVisible });
+      await qc.invalidateQueries({ queryKey: ['documents', patient.id] });
+      toast.success(doc.patientVisible ? 'Archivo ocultado al paciente' : 'Archivo visible para el paciente');
+    } catch (e: any) {
+      toast.error(e.response?.data?.error || 'No se pudo cambiar la visibilidad');
+    } finally {
+      setChangingPatientVisibilityId(null);
+    }
+  };
 
   const borrarDocumento = async (doc: any) => {
     const label = DOC_OBLIGATORIOS.find((o) => o.type === doc.type)?.label || 'documento';
@@ -1290,7 +1230,23 @@ function HistorialPorFecha({ patient, docs }: { patient: any; docs: any[] }) {
                                 </span>
                               )}
                             </a>
-                            <div className="flex items-center gap-3 shrink-0">
+                            <div className="flex items-center gap-2 shrink-0">
+                              {puedeAutorizar && tieneEmpresa && (
+                                <button type="button" onClick={() => setCompanyVisibility(d)}
+                                  disabled={changingVisibilityId === d.id}
+                                  title={d.companyVisible ? 'Visible para la empresa — clic para ocultar' : 'Oculto a la empresa — clic para mostrar'}
+                                  className={`text-[11px] px-2 py-0.5 rounded-full border flex items-center gap-1 transition disabled:opacity-50 ${d.companyVisible ? 'border-emerald-500 text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20' : 'border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-600'}`}>
+                                  {d.companyVisible ? <Eye size={12} /> : <EyeOff size={12} />} Empresa
+                                </button>
+                              )}
+                              {puedeAutorizar && tieneCorreo && (
+                                <button type="button" onClick={() => setPatientVisibility(d)}
+                                  disabled={changingPatientVisibilityId === d.id}
+                                  title={d.patientVisible ? 'Visible para el paciente — clic para ocultar' : 'Oculto al paciente — clic para mostrar'}
+                                  className={`text-[11px] px-2 py-0.5 rounded-full border flex items-center gap-1 transition disabled:opacity-50 ${d.patientVisible ? 'border-emerald-500 text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20' : 'border-slate-200 dark:border-slate-700 text-slate-400 hover:text-slate-600'}`}>
+                                  {d.patientVisible ? <Eye size={12} /> : <EyeOff size={12} />} Paciente
+                                </button>
+                              )}
                               <span className="text-xs text-slate-400">{d.uploadedBy?.fullName || ''}</span>
                               <button onClick={() => borrarDocumento(d)} title="Borrar este documento" className="text-slate-400 hover:text-red-500 transition">
                                 <Trash2 size={14} />

@@ -31,6 +31,7 @@ import { initSocket } from './socket';
 import { authRequiredCookieOrHeader, AuthRequest } from './middleware/auth';
 import { apiLimiter, publicSurveyLimiter, publicCpLimiter } from './middleware/rateLimits';
 import { verifyTurnstile } from './middleware/turnstile';
+import { issueSurveyChallenge, surveyAntiBot } from './middleware/surveyAntiBot';
 
 // ---- Rutas protegidas (requieren token JWT) ----
 import auth         from './routes/auth';
@@ -120,9 +121,20 @@ app.get('/api/public/companies', async (_req, res) => {
 // Encuesta medica que llena el paciente en la tablet antes del examen
 // Crea el paciente y su encuesta en una sola operacion
 // Protegida contra bots: rate limit + captcha Turnstile (si está configurado)
-app.post('/api/public/survey', publicSurveyLimiter, verifyTurnstile, async (req, res) => {
+// Token de tiempo firmado para la encuesta pública (defensa anti-bots). El
+// frontend lo pide al abrir /encuesta y lo devuelve al enviar.
+app.get('/api/public/survey/challenge', issueSurveyChallenge);
+
+app.post('/api/public/survey', publicSurveyLimiter, surveyAntiBot, verifyTurnstile, async (req, res) => {
   const d = req.body;
   try {
+    // Resuelve la FK de empresa por nombre (igual que la encuesta de la tablet),
+    // para que el paciente quede ligado a su Company y no solo al texto libre.
+    const empresa = typeof d.empresa === 'string' ? d.empresa.trim() : '';
+    const companyId = empresa && empresa !== 'Sin empresa'
+      ? (await prisma.company.findFirst({ where: { name: { equals: empresa, mode: 'insensitive' } }, select: { id: true } }))?.id ?? null
+      : null;
+
     // Primero crea el paciente con datos basicos
     const patient = await prisma.patient.create({
       data: {
@@ -132,6 +144,7 @@ app.post('/api/public/survey', publicSurveyLimiter, verifyTurnstile, async (req,
         nss:       d.nss           || null,
         birthDate: d.fechaNacimiento ? new Date(d.fechaNacimiento) : null,
         company:   d.empresa       || null,
+        companyId,
       },
     });
 

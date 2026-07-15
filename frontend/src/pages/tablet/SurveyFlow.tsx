@@ -841,7 +841,7 @@ function LadaCombobox({ value, onChange }: { value: string; onChange: (lada: str
     : LADAS;
 
   return (
-    <div className="relative" style={{ width: '230px', flexShrink: 0 }}>
+    <div className="relative w-full sm:w-[230px] sm:shrink-0">
       <input
         className="input"
         placeholder="País o código (+52)"
@@ -1241,7 +1241,20 @@ export default function SurveyFlow({ onClose, portalMode = false, onSubmit, init
   };
 
   const guardar = async () => {
-    if (!form.nombre.trim()) { toast.error('El nombre es requerido'); return; }
+    // No se puede enviar sin contestar todo: valida cada paso, marca los
+    // incompletos, lleva al primero y avisa qué falta.
+    const incompletos = FORM_STEPS
+      .map((_, i) => i + 1)
+      .filter(step => missingForStep(step, form).length > 0);
+    if (incompletos.length > 0) {
+      setWarnedSteps(prev => Array.from(new Set([...prev, ...incompletos])));
+      const primero = incompletos[0];
+      setFormStep(primero);
+      scrollRef.current?.scrollTo(0, 0);
+      const faltantes = missingForStep(primero, form);
+      toast.error(`Completa todo antes de enviar. Falta en "${FORM_STEPS[primero - 1].label}": ${faltantes.join(', ')}`);
+      return;
+    }
     setSaving(true);
     try {
       const { lada, estado, pais, municipio, celular, drogas, ultimoTatuajeAnios, ultimoTatuajeMeses, escolaridadEstatus, lugarNacimientoPais, lugarNacimientoEstado, lugarNacimientoMunicipio, ...rest } = form;
@@ -1561,7 +1574,7 @@ export default function SurveyFlow({ onClose, portalMode = false, onSubmit, init
               value={form.nombre} onChange={e => set('nombre', e.target.value)} />
           </Field>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Edad">
               <input className="input" type="number" min="0" max="120" placeholder="Ej. 32"
                 value={form.edad} readOnly={!!form.fechaNacimiento}
@@ -1583,7 +1596,7 @@ export default function SurveyFlow({ onClose, portalMode = false, onSubmit, init
           </Field>
 
           <Field label={`Número de celular (${LADA_DIGITOS[form.lada] ?? 10} dígitos)`}>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2">
               <LadaCombobox
                 value={form.lada}
                 onChange={lada => { set('lada', lada); set('celular', ''); }}
@@ -1618,7 +1631,7 @@ export default function SurveyFlow({ onClose, portalMode = false, onSubmit, init
               }} />
           </Field>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Field label="Escolaridad">
                 <select className="input" value={form.escolaridad}
@@ -1650,7 +1663,7 @@ export default function SurveyFlow({ onClose, portalMode = false, onSubmit, init
 
           <div>
             <Label>Lugar de nacimiento</Label>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <Field label="País">
                 <SearchSelect
                   options={PAISES}
@@ -1731,7 +1744,7 @@ export default function SurveyFlow({ onClose, portalMode = false, onSubmit, init
               </div>
             </Field>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Calle">
                 <input className="input" placeholder="Ej. Av. Constitución"
                   value={form.calle} onChange={e => set('calle', e.target.value)} />
@@ -1755,7 +1768,7 @@ export default function SurveyFlow({ onClose, portalMode = false, onSubmit, init
                 value={form.municipio} onChange={e => set('municipio', e.target.value)} />
             </Field>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Field label="Estado">
                 <input className="input" placeholder="Ej. Nuevo León"
                   value={form.estado} onChange={e => set('estado', e.target.value)} />
@@ -1918,7 +1931,7 @@ export default function SurveyFlow({ onClose, portalMode = false, onSubmit, init
         {formStep === 4 && <section className="card space-y-5">
           <SectionHeader icon="smoking_rooms" title="Hábitos de consumo" color={FORM_STEPS[3].color} />
 
-          <div className="grid grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
             {/* ── Tabaquismo ── */}
             <div className="space-y-3">
@@ -2090,7 +2103,7 @@ export default function SurveyFlow({ onClose, portalMode = false, onSubmit, init
             <BoolPills value={form.esquemaVacunacion} onChange={v => set('esquemaVacunacion', v)} />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="N° de dosis anticovid">
               <select className="input" value={form.dosisAnticovid} onChange={e => {
                 const val = e.target.value;
@@ -2269,7 +2282,7 @@ export default function SurveyFlow({ onClose, portalMode = false, onSubmit, init
         {formStep === 7 && <section className="card space-y-4">
           <SectionHeader icon="work" title="Antecedentes laborales" color={FORM_STEPS[6].color} />
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Edad de inicio laboral">
               <input className="input"
                 value={form.edadInicioLaboral} onChange={e => set('edadInicioLaboral', e.target.value)} />
@@ -2328,8 +2341,8 @@ export default function SurveyFlow({ onClose, portalMode = false, onSubmit, init
                 Agregar empleo
               </button>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto -mx-4 px-4 md:mx-0 md:px-0">
+              <table className="w-full text-sm min-w-[600px]">
                 <thead>
                   <tr>
                     {['#', 'Empresa', 'Cargo / Puesto', 'Tiempo', 'Exposiciones', ''].map(h => (
@@ -2430,7 +2443,7 @@ export default function SurveyFlow({ onClose, portalMode = false, onSubmit, init
                       })}
                       className="mt-2 space-y-2">
                       {item.entradas.map((entrada, ei) => (
-                        <div key={ei} className="grid grid-cols-2 gap-3 items-end">
+                        <div key={ei} className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
                           <Field label="Especifique">
                             <input className="input" placeholder={meta.phEsp}
                               value={entrada.especifique}

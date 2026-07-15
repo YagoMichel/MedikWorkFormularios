@@ -14,6 +14,7 @@ import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import { prisma } from '../prisma';
+import { autoLinkPatientByVerifiedEmail } from '../services/patientLink';
 import { signToken, AUTH_COOKIE } from '../middleware/auth';
 import { APP_URL } from '../services/email';
 import { getProvider, enabledProviders, buildAuthUrl, exchangeCode, signState, verifyState } from '../services/oauth';
@@ -75,6 +76,10 @@ router.get('/:provider/callback', async (req, res) => {
         data: { email, fullName: name || email, role: 'PACIENTE', passwordHash: placeholder, emailVerified: true, active: true },
       });
     }
+
+    // Correo verificado por el proveedor → ligar su expediente por correo (si
+    // llenó la encuesta con este mismo correo) para que consulte sus resultados.
+    if (user.role === 'PACIENTE') await autoLinkPatientByVerifiedEmail(user.id, user.email);
 
     const token = signToken({ id: user.id, role: user.role, email: user.email });
     res.cookie(AUTH_COOKIE, token, cookieOptions);

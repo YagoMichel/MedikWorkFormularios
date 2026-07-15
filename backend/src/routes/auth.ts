@@ -11,6 +11,7 @@ import { verifyTurnstile } from '../middleware/turnstile';
 import { logAudit } from '../services/audit';
 import jwt from 'jsonwebtoken';
 import { createAuthToken, findValidToken, markTokenUsed } from '../services/authTokens';
+import { autoLinkPatientByVerifiedEmail } from '../services/patientLink';
 import { sendPatientVerificationEmail, sendPasswordResetEmail, isEmailConfigured, APP_URL } from '../services/email';
 
 const router = Router();
@@ -117,9 +118,16 @@ router.post('/verify-email', async (req, res) => {
   const token = typeof req.body?.token === 'string' ? req.body.token : '';
   const valid = await findValidToken(token, 'EMAIL_VERIFICATION');
   if (!valid) return res.status(400).json({ error: 'Enlace inválido o caducado. Regístrate de nuevo.' });
-  await prisma.user.update({ where: { id: valid.userId }, data: { emailVerified: true } });
+  const user = await prisma.user.update({
+    where: { id: valid.userId },
+    data: { emailVerified: true },
+    select: { id: true, email: true },
+  });
   await markTokenUsed(valid.id);
-  res.json({ ok: true });
+  // Correo ya verificado → ligar su expediente (si llenó la encuesta con este
+  // mismo correo) para que pueda consultar su formulario y resultados.
+  const linkedPatientId = await autoLinkPatientByVerifiedEmail(user.id, user.email);
+  res.json({ ok: true, linked: !!linkedPatientId });
 });
 
 // =============================================================

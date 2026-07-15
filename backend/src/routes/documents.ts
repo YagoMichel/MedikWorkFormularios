@@ -46,9 +46,9 @@ router.get('/', async (req: AuthRequest, res) => {
   res.json(docs);
 });
 
-// GET /api/documents/company-review — bandeja central para que DOCTOR/MASTER
+// GET /api/documents/company-review — bandeja central para que DOCTOR/ADMIN
 // revisen archivos de pacientes vinculados a empresas y decidan su visibilidad.
-router.get('/company-review', requireRole('DOCTOR', 'MASTER'), async (_req, res) => {
+router.get('/company-review', requireRole('DOCTOR', 'ADMIN', 'MASTER'), async (_req, res) => {
   const patients = await prisma.patient.findMany({
     where: {
       AND: [
@@ -136,9 +136,9 @@ router.post('/upload', upload.single('file'), async (req: AuthRequest, res) => {
   res.status(201).json(doc);
 });
 
-// GET /api/documents/:id/preview — vista previa autenticada para DOCTOR/MASTER.
-// El médico puede revisar el archivo antes de decidir si lo autoriza para la empresa.
-router.get('/:id/preview', requireRole('DOCTOR', 'MASTER'), async (req: AuthRequest, res) => {
+// GET /api/documents/:id/preview — vista previa autenticada para DOCTOR/ADMIN.
+// Permite revisar el archivo antes de decidir si se autoriza para la empresa.
+router.get('/:id/preview', requireRole('DOCTOR', 'ADMIN', 'MASTER'), async (req: AuthRequest, res) => {
   const document = await prisma.document.findUnique({ where: { id: req.params.id } });
   if (!document) return res.status(404).json({ error: 'Documento no encontrado' });
   logAudit(req, 'DOCUMENT_DOWNLOAD', { targetType: 'Document', targetId: document.id, patientId: document.patientId, detail: `preview: ${document.fileName}` });
@@ -174,9 +174,9 @@ router.get('/:id/preview', requireRole('DOCTOR', 'MASTER'), async (req: AuthRequ
   return res.sendFile(localPath);
 });
 
-// PATCH /api/documents/:id/company-visibility — únicamente un DOCTOR decide
-// qué archivo específico puede consultar la empresa del paciente.
-router.patch('/:id/company-visibility', requireRole('DOCTOR', 'MASTER'), async (req: AuthRequest, res) => {
+// PATCH /api/documents/:id/company-visibility — un DOCTOR o ADMIN decide qué
+// archivo específico puede consultar la empresa del paciente.
+router.patch('/:id/company-visibility', requireRole('DOCTOR', 'ADMIN', 'MASTER'), async (req: AuthRequest, res) => {
   if (typeof req.body?.visible !== 'boolean') return res.status(400).json({ error: 'visible debe ser booleano' });
   const existing = await prisma.document.findUnique({
     where: { id: req.params.id },
@@ -198,10 +198,10 @@ router.patch('/:id/company-visibility', requireRole('DOCTOR', 'MASTER'), async (
   res.json(document);
 });
 
-// PATCH /api/documents/:id/patient-visibility — únicamente un DOCTOR decide qué
+// PATCH /api/documents/:id/patient-visibility — un DOCTOR o ADMIN decide qué
 // documento puede ver el paciente en su portal. En salud ocupacional los
 // resultados se liberan tras validación médica (NOM-004): privado por defecto.
-router.patch('/:id/patient-visibility', requireRole('DOCTOR', 'MASTER'), async (req: AuthRequest, res) => {
+router.patch('/:id/patient-visibility', requireRole('DOCTOR', 'ADMIN', 'MASTER'), async (req: AuthRequest, res) => {
   if (typeof req.body?.visible !== 'boolean') return res.status(400).json({ error: 'visible debe ser booleano' });
   const existing = await prisma.document.findUnique({ where: { id: req.params.id } });
   if (!existing) return res.status(404).json({ error: 'Documento no encontrado' });

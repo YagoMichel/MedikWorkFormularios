@@ -19,6 +19,9 @@ const maskedNss = (nss?: string | null) => {
 export default function CompaniesReview() {
   const qc = useQueryClient();
   const [search, setSearch] = useState('');
+  const [companyFilter, setCompanyFilter] = useState('');       // id o nombre de empresa
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved'>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | keyof typeof TYPE_LABEL>('all');
   const [openCompany, setOpenCompany] = useState<string | null>(null);
   const [openPatient, setOpenPatient] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -30,24 +33,56 @@ export default function CompaniesReview() {
     queryFn: async () => (await api.get('/documents/company-review')).data,
   });
 
+  const companyKeyOf = (patient: any) =>
+    patient.companyRel?.id || (patient.companyRel?.name || patient.company || 'Sin empresa').toLowerCase();
+
+  // Lista de empresas (para el selector), únicas y ordenadas.
+  const companyOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const patient of patients as any[]) {
+      const name = patient.companyRel?.name || patient.company || 'Sin empresa';
+      map.set(companyKeyOf(patient), name);
+    }
+    return [...map.entries()].map(([key, name]) => ({ key, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [patients]);
+
   const groups = useMemo(() => {
     const term = search.trim().toLowerCase();
     const map = new Map<string, { name: string; patients: any[] }>();
     for (const patient of patients as any[]) {
       const companyName = patient.companyRel?.name || patient.company || 'Sin empresa';
+      const key = companyKeyOf(patient);
+
+      // Filtro por empresa (selector)
+      if (companyFilter && key !== companyFilter) continue;
+
+      // Filtro de texto: empresa, nombre o NSS
       if (term && !companyName.toLowerCase().includes(term) &&
-          !patient.fullName.toLowerCase().includes(term)) continue;
-      const key = patient.companyRel?.id || companyName.toLowerCase();
+          !patient.fullName.toLowerCase().includes(term) &&
+          !(patient.nss || '').toLowerCase().includes(term)) continue;
+
+      // Filtros a nivel documento: estado (visible/pendiente) y tipo
+      const filteredDocs = (patient.documents as any[]).filter((doc) => {
+        if (statusFilter === 'pending' && doc.companyVisible) return false;
+        if (statusFilter === 'approved' && !doc.companyVisible) return false;
+        if (typeFilter !== 'all' && doc.type !== typeFilter) return false;
+        return true;
+      });
+      if (filteredDocs.length === 0) continue; // sin documentos que mostrar tras filtrar
+
       if (!map.has(key)) map.set(key, { name: companyName, patients: [] });
-      map.get(key)!.patients.push(patient);
+      map.get(key)!.patients.push({ ...patient, filteredDocs });
     }
     return [...map.entries()].map(([id, value]) => ({ id, ...value }))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [patients, search]);
+  }, [patients, search, companyFilter, statusFilter, typeFilter]);
 
   const documents = (patients as any[]).flatMap((patient) => patient.documents);
   const pending = documents.filter((document) => !document.companyVisible).length;
   const approved = documents.filter((document) => document.companyVisible).length;
+  const filtersActive = !!search || !!companyFilter || statusFilter !== 'all' || typeFilter !== 'all';
+  const clearFilters = () => { setSearch(''); setCompanyFilter(''); setStatusFilter('all'); setTypeFilter('all'); };
 
   const toggleVisibility = async (document: any) => {
     setSavingId(document.id);
@@ -93,9 +128,43 @@ export default function CompaniesReview() {
         </div>
       </div>
 
-      <div className="relative">
-        <Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-        <input className="input" style={{ paddingLeft: '2.5rem' }} placeholder="Buscar empresa o paciente por nombre…" value={search} onChange={(e) => setSearch(e.target.value)} />
+      <div className="card space-y-3">
+        <div className="relative">
+          <Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input className="input" style={{ paddingLeft: '2.5rem' }} placeholder="Buscar por empresa, paciente o NSS…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Empresa</label>
+            <select className="input mt-1" value={companyFilter} onChange={(e) => setCompanyFilter(e.target.value)}>
+              <option value="">Todas las empresas</option>
+              {companyOptions.map((c) => <option key={c.key} value={c.key}>{c.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Estado</label>
+            <select className="input mt-1" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)}>
+              <option value="all">Todos</option>
+              <option value="pending">Pendientes</option>
+              <option value="approved">Autorizados</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Tipo de documento</label>
+            <select className="input mt-1" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as any)}>
+              <option value="all">Todos</option>
+              {Object.entries(TYPE_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </div>
+        </div>
+        {filtersActive && (
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-slate-400">{groups.length} empresa(s) · {groups.reduce((n, g) => n + g.patients.length, 0)} paciente(s)</span>
+            <button type="button" onClick={clearFilters} className="text-xs font-semibold text-[#3375c8] hover:underline flex items-center gap-1">
+              <X size={13} /> Limpiar filtros
+            </button>
+          </div>
+        )}
       </div>
 
       {isLoading && <div className="card text-sm text-slate-400">Cargando archivos…</div>}
@@ -104,7 +173,7 @@ export default function CompaniesReview() {
       <div className="space-y-3">
         {groups.map((group) => {
           const companyOpen = openCompany === group.id;
-          const groupDocs = group.patients.flatMap((patient) => patient.documents);
+          const groupDocs = group.patients.flatMap((patient) => patient.filteredDocs);
           const groupPending = groupDocs.filter((document) => !document.companyVisible).length;
           return (
             <div key={group.id} className="card p-0 overflow-hidden">
@@ -126,12 +195,12 @@ export default function CompaniesReview() {
                         <div className="font-semibold text-sm truncate">{patient.fullName}</div>
                         <div className="text-xs text-slate-400">NSS: {maskedNss(patient.nss)}</div>
                       </div>
-                      <span className="ml-auto text-xs text-slate-400">{patient.documents.length} archivo(s)</span>
+                      <span className="ml-auto text-xs text-slate-400">{patient.filteredDocs.length} archivo(s)</span>
                       <ChevronDown size={16} className={`transition-transform ${patientOpen ? 'rotate-180' : ''}`} />
                     </button>
 
                     {patientOpen && <div className="p-3 space-y-2">
-                      {patient.documents.map((document: any) => <div key={document.id} className="flex items-center gap-3 rounded-xl border border-slate-100 dark:border-slate-700 p-3">
+                      {patient.filteredDocs.map((document: any) => <div key={document.id} className="flex items-center gap-3 rounded-xl border border-slate-100 dark:border-slate-700 p-3">
                         <FileText size={17} className="text-blue-500 shrink-0" />
                         <button type="button"
                           disabled={previewLoadingId === document.id}

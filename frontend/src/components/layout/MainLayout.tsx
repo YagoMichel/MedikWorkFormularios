@@ -307,7 +307,7 @@ export default function MainLayout() {
     { to: '/citas',     icon: 'calendar_month', label: 'Citas'      },
     { to: '/calendario',icon: 'date_range',     label: 'Calendario' },
     { to: '/reportes',  icon: 'bar_chart',      label: 'Reportes'   },
-    ...(isMaster ? [{ to: '/company-review', icon: 'approval', label: 'Aprobaciones' }] : []),
+    { to: '/company-review', icon: 'approval', label: 'Archivos por empresa' },
     ...(isMaster ? [{ to: '/system-status', icon: 'monitor_heart', label: 'Estado del sistema' }] : []),
   ] : [
     { to: '/',             icon: 'dashboard', label: 'Dashboard' },
@@ -321,7 +321,7 @@ export default function MainLayout() {
     '/appointments': 'Agenda', '/inventory': 'Inventario',
     '/movements': 'Movimientos', '/users': 'Usuarios', '/auditoria': 'Auditoría', '/prescriptions': 'Recetas',
     '/citas': 'Citas', '/calendario': 'Calendario', '/reportes': 'Reportes', '/companies': 'Empresas',
-    '/system-status': 'Estado del sistema', '/company-review': 'Aprobaciones de empresa',
+    '/system-status': 'Estado del sistema', '/company-review': 'Archivos por empresa',
   };
   const title = titleMap[loc.pathname] || (loc.pathname.startsWith('/patients/') ? 'Ficha de paciente' : 'Mediwork');
 
@@ -334,20 +334,17 @@ export default function MainLayout() {
         <div className="layout-sidebar-top py-4 w-full flex justify-center border-b">
           <img src={logo} alt="Logo" className="w-10 h-10 object-contain" />
         </div>
-        <nav className="flex-1 flex flex-col items-center gap-3 py-4">
+        <nav className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar flex flex-col items-center gap-3 py-4 w-full">
           {links.map((l) => (
-            <NavLink key={l.to} to={l.to} end={l.to === '/'}
+            <NavLink key={l.to} to={l.to} end={l.to === '/'} title={l.label}
               className={({ isActive }) =>
-                `group relative w-11 h-11 rounded-xl flex items-center justify-center transition nav-link ${isActive ? 'nav-link-active text-white shadow' : 'nav-link-idle'}`
+                `group relative w-11 h-11 shrink-0 rounded-xl flex items-center justify-center transition nav-link ${isActive ? 'nav-link-active text-white shadow' : 'nav-link-idle'}`
               }
               style={({ isActive }) => isActive ? { background: '#3375c8' } : {}}>
               {({ isActive }) => (
                 <>
                   {isActive && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r" style={{ background: '#3375c8' }} />}
                   <Icon name={l.icon} />
-                  <span className="nav-tooltip absolute left-[calc(100%+12px)] whitespace-nowrap text-white text-xs font-semibold px-3 py-1.5 rounded-md opacity-0 invisible group-hover:opacity-100 group-hover:visible transition pointer-events-none shadow-lg z-50">
-                    {l.label}
-                  </span>
                 </>
               )}
             </NavLink>

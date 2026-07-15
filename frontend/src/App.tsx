@@ -29,7 +29,7 @@ import VerifyEmail  from './pages/auth/VerifyEmail';
 import ForgotPassword from './pages/auth/ForgotPassword';
 import ResetPassword  from './pages/auth/ResetPassword';
 import OAuthCallback  from './pages/auth/OAuthCallback';
-import SurveyPublic from './pages/public/SurveyPublic';
+import EncuestaPublica from './pages/public/EncuestaPublica';
 
 // -- Portales externos (PACIENTE / EMPRESA) --
 import PortalLayout      from './pages/portal/PortalLayout';
@@ -85,7 +85,7 @@ export default function App() {
         <Route path="/recuperar" element={<ForgotPassword />} />
         <Route path="/restablecer" element={<ResetPassword />} />
         <Route path="/oauth/callback" element={<OAuthCallback />} />
-        <Route path="/encuesta"  element={<SurveyPublic />} />
+        <Route path="/encuesta"  element={<EncuestaPublica />} />
         <Route path="*"          element={<Navigate to="/login" replace />} />
       </Routes>
     );
@@ -107,11 +107,10 @@ export default function App() {
           <Route path="/citas"       element={<AdminBatchesManager />} />
           <Route path="/calendario"  element={<AdminCalendarView />} />
           <Route path="/reportes"    element={<AdminReports />} />
+          {/* Revisión de archivos por empresa/persona — ADMIN y MASTER */}
+          <Route path="/company-review" element={<DoctorCompaniesReview />} />
           {user.role === 'MASTER' && (
-            <>
-              <Route path="/system-status" element={<MasterSystemStatus />} />
-              <Route path="/company-review" element={<DoctorCompaniesReview />} />
-            </>
+            <Route path="/system-status" element={<MasterSystemStatus />} />
           )}
           {/* Compartidas con doctor */}
           <Route path="/profile"     element={<Profile />} />
