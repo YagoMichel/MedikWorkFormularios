@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { api } from '../../services/api';
 import { useAuth } from '../../stores/auth';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import logo from '../../assets/logo.png';
 import { TurnstileWidget, TURNSTILE_SITE_KEY } from '../../components/TurnstileWidget';
 import SocialLoginButtons from '../../components/SocialLoginButtons';
@@ -109,7 +109,7 @@ export default function Login() {
               </div>
 
               <div className="flex justify-end">
-                <a href="/recuperar" className="text-sm text-[#2560aa] font-semibold hover:underline">¿Olvidaste tu contraseña?</a>
+                <Link to="/recuperar" className="text-sm text-[#2560aa] font-semibold hover:underline">¿Olvidaste tu contraseña?</Link>
               </div>
 
               <TurnstileWidget onToken={setCaptcha} />
@@ -129,7 +129,7 @@ export default function Login() {
             <div className="mt-8 pt-6 border-t border-slate-100 text-center">
               <p className="text-sm text-slate-500">
                 ¿Eres paciente y no tienes cuenta?{' '}
-                <a href="/signup" className="text-[#2560aa] font-bold hover:underline">Regístrate</a>
+                <Link to="/signup" className="text-[#2560aa] font-bold hover:underline">Regístrate</Link>
               </p>
             </div>
           </div>
