@@ -15,6 +15,12 @@ import { prisma } from '../prisma';
 import { authRequired, requireRole, AuthRequest } from '../middleware/auth';
 import { getCloudStorageProvider, buildPatientFolderPath } from '../services/storage';
 import { logAudit } from '../services/audit';
+import { sendResultReleasedEmail } from '../services/email';
+
+// Etiqueta legible del tipo de documento (para el correo de aviso al paciente).
+const DOC_TYPE_LABEL: Record<string, string> = {
+  CUESTIONARIO: 'Cuestionario', RESULTADOS: 'Resultados', CONSENTIMIENTO: 'Consentimiento', OTRO: 'Documento',
+};
 
 const router = Router();
 router.use(authRequired, requireRole('ADMIN', 'DOCTOR'));
@@ -203,7 +209,10 @@ router.patch('/:id/company-visibility', requireRole('DOCTOR', 'ADMIN', 'MASTER')
 // resultados se liberan tras validación médica (NOM-004): privado por defecto.
 router.patch('/:id/patient-visibility', requireRole('DOCTOR', 'ADMIN', 'MASTER'), async (req: AuthRequest, res) => {
   if (typeof req.body?.visible !== 'boolean') return res.status(400).json({ error: 'visible debe ser booleano' });
-  const existing = await prisma.document.findUnique({ where: { id: req.params.id } });
+  const existing = await prisma.document.findUnique({
+    where: { id: req.params.id },
+    include: { patient: { select: { fullName: true, email: true } } },
+  });
   if (!existing) return res.status(404).json({ error: 'Documento no encontrado' });
 
   const document = await prisma.document.update({
@@ -220,6 +229,16 @@ router.patch('/:id/patient-visibility', requireRole('DOCTOR', 'ADMIN', 'MASTER')
     targetType: 'Document', targetId: existing.id, patientId: existing.patientId,
     detail: req.body.visible ? `liberar al paciente: ${existing.fileName}` : `revocar al paciente: ${existing.fileName}`,
   });
+
+  // Aviso por correo SOLO al liberar (transición oculto → visible) y si el
+  // paciente tiene correo. Invita a entrar o crear cuenta para verlo. Es
+  // fire-and-forget: no bloquea ni rompe la respuesta si el correo falla.
+  if (req.body.visible && !existing.patientVisible && existing.patient?.email) {
+    const label = DOC_TYPE_LABEL[existing.type] || 'Documento';
+    sendResultReleasedEmail(existing.patient.email, existing.patient.fullName, label)
+      .catch((err) => console.error('[patient-visibility] no se pudo enviar el aviso:', err.message));
+  }
+
   res.json(document);
 });
 

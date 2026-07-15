@@ -13,6 +13,21 @@
 // =============================================================
 import { prisma } from '../prisma';
 
+// Si el correo coincide con el de alguna empresa (Company.email), devuelve el id
+// de esa empresa. Sirve para que quien cree su cuenta con el correo registrado
+// de una empresa quede con rol EMPRESA (acceso al portal de esa empresa) en vez
+// de paciente. El correo lo fija el personal de la clínica, así que es una
+// autorización explícita; además el registro exige verificar el correo.
+export async function companyIdByEmail(email: string): Promise<string | null> {
+  const correo = (email || '').toLowerCase().trim();
+  if (!correo) return null;
+  const company = await prisma.company.findFirst({
+    where: { email: { equals: correo, mode: 'insensitive' } },
+    select: { id: true },
+  });
+  return company?.id ?? null;
+}
+
 // Devuelve el id del expediente ligado (nuevo o el que ya tenía), o null si no
 // se encontró expediente que ligar. No lanza: cualquier problema deja la cuenta
 // sin ligar (el staff siempre puede ligar a mano en Usuarios).

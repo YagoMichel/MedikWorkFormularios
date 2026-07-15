@@ -62,6 +62,10 @@ router.post('/company-account', async (req: AuthRequest, res) => {
       select: { id: true, email: true, fullName: true },
     });
 
+    // Sincroniza el correo de la empresa con el de su cuenta de acceso, para
+    // que en la lista de empresas se vea el mismo correo con el que entra.
+    await prisma.company.update({ where: { id: companyId }, data: { email: emailNorm } });
+
     const token = await createAuthToken(user.id, 'ACTIVATION', 48);
     await sendCompanyActivationEmail(emailNorm, fullName, token);
     logAudit(req, 'USER_CREATE', { targetType: 'User', targetId: user.id, detail: `cuenta empresa: ${emailNorm} (${company.name})` });

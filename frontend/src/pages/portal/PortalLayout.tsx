@@ -37,11 +37,12 @@ export default function PortalLayout() {
     : [
         { to: '/', icon: 'folder_shared', label: 'Mi expediente' },
         { to: '/mi-encuesta', icon: 'assignment', label: 'Mi encuesta' },
+        { to: '/mis-compras', icon: 'shopping_bag', label: 'Mis compras' },
       ];
 
   const titleMap: Record<string, string> = isEmpresa
     ? { '/': 'Expedientes de la empresa' }
-    : { '/': 'Mi expediente', '/mi-encuesta': 'Mi encuesta' };
+    : { '/': 'Mi expediente', '/mi-encuesta': 'Mi encuesta', '/mis-compras': 'Mis compras' };
   const title = titleMap[loc.pathname] || 'Mediwork';
 
   const initials = (user?.fullName || '?').split(' ').filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
@@ -107,6 +108,9 @@ export default function PortalLayout() {
                 <div className="absolute top-full right-0 mt-3 w-52 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-100 dark:border-slate-700 z-50 transform origin-top-right transition-all fade-in">
                   <div className="absolute -top-1.5 right-[20px] w-3 h-3 bg-white dark:bg-slate-800 border-l border-t border-slate-100 dark:border-slate-700 rotate-45"></div>
                   <div className="relative z-10 bg-white dark:bg-slate-800 rounded-2xl overflow-hidden py-2">
+                    <button onClick={() => { nav('/profile'); setShowProfileMenu(false); }} className="w-full px-5 py-3 text-left text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center gap-3 transition">
+                      <span className="material-symbols-rounded text-lg text-slate-400">person</span> Mi Perfil
+                    </button>
                     <button onClick={() => { logout(); nav('/login'); }} className="w-full px-5 py-3 text-left text-sm font-extrabold text-red-600 hover:bg-red-50 dark:hover:bg-red-900/10 flex items-center gap-3 transition">
                       <span className="material-symbols-rounded text-lg text-red-500">logout</span> Cerrar sesión
                     </button>

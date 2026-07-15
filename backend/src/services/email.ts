@@ -80,6 +80,25 @@ export async function sendPatientVerificationEmail(to: string, fullName: string,
   );
 }
 
+// Aviso al paciente de que el médico liberó un resultado/documento en su portal.
+// No incluye el documento ni datos clínicos: solo invita a entrar (o crear cuenta)
+// para consultarlo de forma segura.
+export async function sendResultReleasedEmail(to: string, fullName: string, docLabel?: string) {
+  const url = `${APP_URL}/login`;
+  const que = docLabel ? `un nuevo documento (<b>${docLabel}</b>)` : 'un nuevo resultado';
+  await send(
+    to,
+    'Ya tienes un resultado disponible — Mediwork',
+    wrapper(
+      'Resultado disponible',
+      `Hola ${fullName}, tu médico liberó ${que} en tu expediente. Para consultarlo de forma segura, inicia sesión en tu portal. Si aún no tienes cuenta, puedes crearla con este mismo correo desde la pantalla de inicio de sesión.`,
+      'Iniciar sesión o crear cuenta',
+      url,
+    ),
+    url,
+  );
+}
+
 // Enlace para restablecer la contraseña olvidada (paciente o empresa)
 export async function sendPasswordResetEmail(to: string, fullName: string, token: string) {
   const url = `${APP_URL}/restablecer?token=${token}`;

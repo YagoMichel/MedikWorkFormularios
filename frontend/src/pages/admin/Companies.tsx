@@ -9,7 +9,7 @@ import { api } from '../../services/api';
 import { useAuth, isAdminRole } from '../../stores/auth';
 import toast from 'react-hot-toast';
 import {
-  Plus, Building2, CheckCircle2, Phone, Calendar,
+  Plus, Building2, CheckCircle2, Phone, Mail, Calendar,
   Search, Filter, ArrowUpDown, List, MoreVertical,
   ChevronLeft, ChevronRight, ChevronDown, Pencil, Trash2, LayoutGrid
 } from 'lucide-react';
@@ -214,6 +214,7 @@ export default function Companies() {
               <tr className="border-b border-slate-100">
                 <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Empresa</th>
                 <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Teléfono</th>
+                <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Correo</th>
                 <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Estado</th>
                 <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Fecha de registro</th>
                 {canManage && <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider text-right">Acciones</th>}
@@ -238,10 +239,20 @@ export default function Companies() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      {hasData ? (
+                      {c.phone ? (
                         <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
                           <Phone size={14} className="text-blue-500" />
                           {c.phone}
+                        </div>
+                      ) : (
+                        <span className="text-slate-300 font-bold">—</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      {(c.accountEmail || c.email) ? (
+                        <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                          <Mail size={14} className="text-blue-500" />
+                          <span className="truncate max-w-[200px]">{c.accountEmail || c.email}</span>
                         </div>
                       ) : (
                         <span className="text-slate-300 font-bold">—</span>
@@ -297,7 +308,7 @@ export default function Companies() {
               
               {filtered.length === 0 && !isLoading && (
                 <tr>
-                  <td colSpan={canManage ? 5 : 4} className="px-6 py-12 text-center">
+                  <td colSpan={canManage ? 6 : 5} className="px-6 py-12 text-center">
                     <div className="flex flex-col items-center justify-center text-slate-400 space-y-3">
                       <Building2 size={40} className="text-slate-200" />
                       <p>No se encontraron empresas.</p>
@@ -330,9 +341,13 @@ export default function Companies() {
                   </div>
                   
                   <h3 className="font-bold text-slate-800 text-lg mb-1 truncate">{c.name}</h3>
+                  <div className="flex items-center gap-2 text-sm text-slate-500 mb-1">
+                    <Phone size={14} className={c.phone ? 'text-blue-500' : 'text-slate-300'} />
+                    {c.phone || 'Sin teléfono'}
+                  </div>
                   <div className="flex items-center gap-2 text-sm text-slate-500 mb-4">
-                    <Phone size={14} className={hasData ? 'text-blue-500' : 'text-slate-300'} />
-                    {hasData ? c.phone : 'Sin teléfono'}
+                    <Mail size={14} className={(c.accountEmail || c.email) ? 'text-blue-500' : 'text-slate-300'} />
+                    <span className="truncate">{c.accountEmail || c.email || 'Sin correo'}</span>
                   </div>
                   
                   <div className="flex items-center justify-between pt-4 border-t border-slate-100">
@@ -409,11 +424,21 @@ function CompanyModal({ initial, onClose, onSave, saving }: any) {
           </div>
           <div>
             <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1 block">Teléfono</label>
-            <input 
-              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all" 
+            <input
+              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all"
               placeholder="10 dígitos"
-              value={form.phone || ''} 
-              onChange={f('phone')} 
+              value={form.phone || ''}
+              onChange={f('phone')}
+            />
+          </div>
+          <div>
+            <label className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1 block">Correo electrónico</label>
+            <input
+              type="email"
+              className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all"
+              placeholder="Ej. contacto@empresa.com"
+              value={form.email || ''}
+              onChange={f('email')}
             />
           </div>
         </div>

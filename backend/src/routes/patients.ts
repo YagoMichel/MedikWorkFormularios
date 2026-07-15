@@ -69,7 +69,14 @@ router.get('/:id', async (req: AuthRequest, res) => {
     include: {
       appointments: { include: { doctor: { select: { fullName: true } } }, orderBy: { date: 'desc' } },
       prescriptions: { include: { doctor: { select: { fullName: true } } }, orderBy: { issuedAt: 'desc' } },
-      sales: { orderBy: { createdAt: 'desc' } },
+      sales: {
+        orderBy: { createdAt: 'desc' },
+        include: {
+          items: { include: { product: { select: { name: true, sku: true } } } },
+          abonos: { orderBy: { createdAt: 'asc' } },
+          vendor: { select: { fullName: true } },
+        },
+      },
       companyProfile: { include: { items: { orderBy: { order: 'asc' } } } },
     },
   });

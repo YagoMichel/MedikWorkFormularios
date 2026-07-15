@@ -13,7 +13,7 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend, PieChart, Pie, Cell,
 } from 'recharts';
-import { Users, Building2, Clock, CheckCircle2, Calendar } from 'lucide-react';
+import { Users, Building2, CheckCircle2, Calendar } from 'lucide-react';
 
 const fmt = (n: number) => `$${(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 0 })}`;
 const COLORS = ['#2560aa', '#51abcd', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444'];
@@ -77,7 +77,7 @@ export default function Reports() {
     return <div className="flex items-center justify-center h-[50vh] text-slate-400 font-bold text-sm">Cargando reportes detallados…</div>;
   }
 
-  const { ventasMes, citasMes, top5Companies, top5Products, batchesByStatus, usuariosPastel, kpis, citasPendientes, citasConfirmadas, proximaCita } = data;
+  const { ventasMes, citasMes, top5Companies, top5Products, batchesByStatus, usuariosPastel, kpis, citasConfirmadas, proximaCita } = data;
 
   const statusLabels: Record<string, string> = { BORRADOR: 'Pendiente', CONFIRMADO: 'Confirmado', CANCELADO: 'Cancelado', CERRADO: 'Cerrado' };
   const pieStatus = (batchesByStatus as any[]).map((b: any) => ({ name: statusLabels[b.status] || b.status, value: b._count }));
@@ -92,10 +92,9 @@ export default function Reports() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiBox label="Pacientes"      value={kpis.totalPacientes}  sub="Usuarios registrados"  color="#2560aa" icon={Users} bgClass="bg-[#2560aa]/5 border-[#2560aa]/10" />
         <KpiBox label="Empresas"       value={kpis.totalEmpresas}   sub="Con expediente activo" color="#51abcd" icon={Building2} bgClass="bg-[#51abcd]/5 border-[#51abcd]/10" />
-        <KpiBox label="Por confirmar"  value={citasPendientes}      sub="Solicitudes web/Borrador" color="#f59e0b" icon={Clock} bgClass="bg-amber-50 dark:bg-amber-900/10 border-amber-100 dark:border-amber-900/30" />
         <KpiBox label="Confirmadas"    value={citasConfirmadas}     sub="Citas futuras"         color="#10b981" icon={CheckCircle2} bgClass="bg-emerald-50 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-900/30" />
         <KpiBox
           label="Próxima cita"

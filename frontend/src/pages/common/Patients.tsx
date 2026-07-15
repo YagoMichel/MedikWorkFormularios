@@ -9,7 +9,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../services/api';
 import { Link } from 'react-router-dom';
-import { Plus, Search, User, Building2, Eye, Edit2, Trash2, UserPlus, AlertCircle, ChevronDown } from 'lucide-react';
+import { Plus, Search, User, Building2, Eye, Edit2, Trash2, UserPlus, AlertCircle, ChevronDown, Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 // Mismo valor centinela usado en la tablet para "sin empresa / particular"
@@ -120,6 +120,7 @@ export default function Patients() {
               <tr className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-100 dark:border-slate-700">
                 <th className="py-4 px-6 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Paciente</th>
                 <th className="py-4 px-6 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Empresa</th>
+                <th className="py-4 px-6 text-xs font-extrabold text-slate-500 uppercase tracking-wider">Correo</th>
                 <th className="py-4 px-6 text-xs font-extrabold text-slate-500 uppercase tracking-wider text-center">Cuestionario</th>
                 <th className="py-4 px-6 text-xs font-extrabold text-slate-500 uppercase tracking-wider text-right">Acciones</th>
               </tr>
@@ -146,6 +147,15 @@ export default function Patients() {
                         <><Building2 size={16} className="text-[#51abcd]" /> {p.company}</>
                       ) : (
                         <span className="text-slate-400 italic font-medium">Sin empresa</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="py-4 px-6">
+                    <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400 text-sm">
+                      {p.email ? (
+                        <><Mail size={16} className="text-[#51abcd] shrink-0" /> <span className="truncate max-w-[220px]">{p.email}</span></>
+                      ) : (
+                        <span className="text-slate-400 italic font-medium">Sin correo</span>
                       )}
                     </div>
                   </td>
@@ -180,7 +190,7 @@ export default function Patients() {
               ))}
               {patients.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-16 text-center text-slate-500 font-medium">
+                  <td colSpan={5} className="py-16 text-center text-slate-500 font-medium">
                     <div className="flex flex-col items-center justify-center">
                       <div className="w-16 h-16 bg-slate-50 dark:bg-slate-800/50 rounded-full flex items-center justify-center mb-4">
                         <Search size={28} className="text-slate-300" />

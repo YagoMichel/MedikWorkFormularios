@@ -16,8 +16,18 @@ const schema = z.object({
 });
 
 router.get('/', async (_req, res) => {
-  const list = await prisma.company.findMany({ orderBy: { name: 'asc' } });
-  res.json(list);
+  const list = await prisma.company.findMany({
+    orderBy: { name: 'asc' },
+    // Cuenta de portal EMPRESA ligada (la que usa para acceder al sistema).
+    include: { portalUsers: { where: { role: 'EMPRESA' }, select: { email: true }, take: 1 } },
+  });
+  // accountEmail = correo con el que la empresa accede al sistema. La UI lo
+  // muestra como el correo de la empresa (para que ambos coincidan).
+  const result = list.map(({ portalUsers, ...c }) => ({
+    ...c,
+    accountEmail: portalUsers[0]?.email ?? null,
+  }));
+  res.json(result);
 });
 
 router.post('/', requireRole('ADMIN'), async (req, res) => {

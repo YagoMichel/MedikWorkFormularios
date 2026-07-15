@@ -35,6 +35,7 @@ import EncuestaPublica from './pages/public/EncuestaPublica';
 import PortalLayout      from './pages/portal/PortalLayout';
 import PatientDashboard  from './pages/portal/PatientDashboard';
 import PatientSurveyPage from './pages/portal/PatientSurveyPage';
+import PatientPurchases  from './pages/portal/PatientPurchases';
 import CompanyDashboard  from './pages/portal/CompanyDashboard';
 
 // -- Paginas ADMIN (compañero) --
@@ -144,6 +145,8 @@ export default function App() {
         <Route element={<PortalLayout />}>
           <Route path="/"            element={<PatientDashboard />} />
           <Route path="/mi-encuesta" element={<PatientSurveyPage />} />
+          <Route path="/mis-compras" element={<PatientPurchases />} />
+          <Route path="/profile"     element={<Profile />} />
           <Route path="*"            element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
@@ -157,6 +160,7 @@ export default function App() {
       <Routes>
         <Route element={<PortalLayout />}>
           <Route path="/" element={<CompanyDashboard />} />
+          <Route path="/profile" element={<Profile />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

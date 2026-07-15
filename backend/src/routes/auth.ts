@@ -11,7 +11,7 @@ import { verifyTurnstile } from '../middleware/turnstile';
 import { logAudit } from '../services/audit';
 import jwt from 'jsonwebtoken';
 import { createAuthToken, findValidToken, markTokenUsed } from '../services/authTokens';
-import { autoLinkPatientByVerifiedEmail } from '../services/patientLink';
+import { autoLinkPatientByVerifiedEmail, companyIdByEmail } from '../services/patientLink';
 import { sendPatientVerificationEmail, sendPasswordResetEmail, isEmailConfigured, APP_URL } from '../services/email';
 
 const router = Router();
@@ -95,11 +95,16 @@ router.post('/signup', signupLimiter, verifyTurnstile, async (req, res) => {
     return res.status(201).json({ ok: true });
   }
 
+  // Si el correo está registrado como el de una empresa, la cuenta nace con rol
+  // EMPRESA ligada a esa empresa (acceso a los resultados de sus empleados).
+  // Si no, es un paciente normal.
+  const companyId = await companyIdByEmail(emailNorm);
   const user = await prisma.user.create({
     data: {
       email: emailNorm,
       fullName,
-      role: 'PACIENTE',
+      role: companyId ? 'EMPRESA' : 'PACIENTE',
+      companyId: companyId ?? undefined,
       passwordHash: await bcrypt.hash(password, 12),
       emailVerified: false,
     },
@@ -204,9 +209,22 @@ router.put('/me', authRequired, async (req: AuthRequest, res) => {
   const parsed = updateMeSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
   try {
+    // Restricciones por rol (se validan en el servidor, no solo en la UI):
+    //  - EMPRESA: el nombre es la identidad oficial de la empresa → no lo cambia.
+    //  - Portal (PACIENTE/EMPRESA): el correo es su acceso YA VERIFICADO → no se
+    //    cambia desde el perfil (evita dejarlo en un correo no verificado).
+    const role = req.user!.role;
+    const isPortal = role === 'PACIENTE' || role === 'EMPRESA';
+    const data: { fullName?: string; email?: string } = {};
+    if (parsed.data.fullName !== undefined && role !== 'EMPRESA') data.fullName = parsed.data.fullName;
+    if (parsed.data.email !== undefined && !isPortal) data.email = parsed.data.email;
+    if (Object.keys(data).length === 0) {
+      return res.status(403).json({ error: 'No tienes permitido cambiar estos datos desde tu perfil.' });
+    }
+
     const user = await prisma.user.update({
       where: { id: req.user!.id },
-      data: parsed.data,
+      data,
       select: { id: true, email: true, fullName: true, role: true, photoUrl: true },
     });
     res.json(user);

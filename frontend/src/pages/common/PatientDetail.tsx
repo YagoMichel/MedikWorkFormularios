@@ -6,6 +6,7 @@ import { useAuth, isAdminRole } from '../../stores/auth';
 import toast from 'react-hot-toast';
 import { ArrowLeft, Eye, EyeOff, ArrowDown, HeartPulse, Droplet, FlaskConical, Baby, Stethoscope, Activity, Bone, FileDown, CheckCircle2, AlertCircle, FileStack, ChevronDown, ChevronRight, Trash2, Plus, FileText, CloudUpload } from 'lucide-react';
 import { SurveyEditorForm } from '../../components/SurveyEditorForm';
+import SalesHistory from '../../components/SalesHistory';
 import { buildSurveyPdfBlob } from '../../utils/surveyPdf';
 import { buildExamPdfBlob } from '../../utils/examPdf';
 
@@ -79,19 +80,7 @@ export default function PatientDetail() {
 
       {tab === 'clinical' && <HistorialClinicoTab patient={p} />}
 
-      {tab === 'sales' && (
-        <div className="card">
-          {p.sales.map((s: any) => (
-            <div key={s.id} className="flex justify-between py-2 text-sm border-t border-slate-100">
-              <span className="font-mono">{s.folio}</span>
-              <span>{new Date(s.createdAt).toLocaleDateString()}</span>
-              <span>${s.total.toFixed(2)}</span>
-              <span className="text-xs">{s.status}</span>
-            </div>
-          ))}
-          {p.sales.length === 0 && <p className="text-slate-500 text-sm">Sin compras.</p>}
-        </div>
-      )}
+      {tab === 'sales' && <ComprasTab sales={p.sales} />}
 
     </div>
   );
@@ -1067,6 +1056,10 @@ function DocumentosTab({ survey, patient }: { survey: any; patient: any }) {
       )}
     </div>
   );
+}
+
+function ComprasTab({ sales }: { sales: any[] }) {
+  return <SalesHistory sales={sales} emptyText="Este paciente no tiene compras registradas." />;
 }
 
 function HistorialClinicoTab({ patient }: { patient: any }) {

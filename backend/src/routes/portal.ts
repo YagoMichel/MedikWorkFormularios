@@ -109,6 +109,22 @@ patientPortal.get('/results', async (req: AuthRequest, res) => {
   res.json({ linked: true, documents, surveys });
 });
 
+// GET /api/portal/patient/purchases — las compras (POS) del propio paciente,
+// con sus productos y abonos. Acotado por el patientId ligado a la cuenta.
+patientPortal.get('/purchases', async (req: AuthRequest, res) => {
+  const pid = await linkedPatientId(req.user!.id);
+  if (!pid) return res.json([]);
+  const sales = await prisma.sale.findMany({
+    where: { patientId: pid },
+    orderBy: { createdAt: 'desc' },
+    include: {
+      items: { include: { product: { select: { name: true } } } },
+      abonos: { orderBy: { createdAt: 'asc' } },
+    },
+  });
+  res.json(sales);
+});
+
 // GET /api/portal/results/:documentId/download — descarga un documento propio
 patientPortal.get('/results/:documentId/download', async (req: AuthRequest, res) => {
   const pid = await linkedPatientId(req.user!.id);

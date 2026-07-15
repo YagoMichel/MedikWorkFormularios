@@ -14,7 +14,7 @@ import { Router } from 'express';
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
 import { prisma } from '../prisma';
-import { autoLinkPatientByVerifiedEmail } from '../services/patientLink';
+import { autoLinkPatientByVerifiedEmail, companyIdByEmail } from '../services/patientLink';
 import { signToken, AUTH_COOKIE } from '../middleware/auth';
 import { APP_URL } from '../services/email';
 import { getProvider, enabledProviders, buildAuthUrl, exchangeCode, signState, verifyState } from '../services/oauth';
@@ -69,11 +69,19 @@ router.get('/:provider/callback', async (req, res) => {
         user = await prisma.user.update({ where: { id: user.id }, data: { emailVerified: true } });
       }
     } else {
-      // Correo nuevo → cuenta PACIENTE con contraseña inservible (solo entra por
-      // social hasta que use "recuperar contraseña" para fijar una).
+      // Correo nuevo → cuenta con contraseña inservible (solo entra por social
+      // hasta que use "recuperar contraseña" para fijar una). Si el correo está
+      // registrado como el de una empresa, nace con rol EMPRESA ligada a ella;
+      // si no, paciente.
       const placeholder = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 12);
+      const companyId = await companyIdByEmail(email);
       user = await prisma.user.create({
-        data: { email, fullName: name || email, role: 'PACIENTE', passwordHash: placeholder, emailVerified: true, active: true },
+        data: {
+          email, fullName: name || email,
+          role: companyId ? 'EMPRESA' : 'PACIENTE',
+          companyId: companyId ?? undefined,
+          passwordHash: placeholder, emailVerified: true, active: true,
+        },
       });
     }
 

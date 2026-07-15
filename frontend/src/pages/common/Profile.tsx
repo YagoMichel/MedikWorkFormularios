@@ -11,6 +11,17 @@ import toast from 'react-hot-toast';
 export default function Profile() {
   const { user, token, setAuth } = useAuth();
 
+  // Restricciones por rol:
+  //  - EMPRESA: el nombre es la identidad oficial de la empresa → no editable aquí.
+  //  - Portal (PACIENTE/EMPRESA): el correo es su acceso YA VERIFICADO → no se
+  //    cambia desde aquí (evitar dejarlo en un correo no verificado y romper el
+  //    login/auto-ligado). Si necesitan cambiarlo, lo ajusta la clínica.
+  const isEmpresa = user?.role === 'EMPRESA';
+  const isPortal = user?.role === 'PACIENTE' || isEmpresa;
+  const canEditName = !isEmpresa;
+  const canEditEmail = !isPortal;
+  const canEditInfo = canEditName || canEditEmail;
+
   // Real-time clock
   const [currentTime, setCurrentTime] = useState(new Date());
   useEffect(() => {
@@ -67,17 +78,20 @@ export default function Profile() {
   };
 
   const handleSaveInfo = async () => {
-    if (!formData.fullName.trim() || !formData.email.trim()) {
-      toast.error('Todos los campos son obligatorios');
-      return;
+    // Solo se envían (y validan) los campos que este rol puede editar.
+    const payload: { fullName?: string; email?: string } = {};
+    if (canEditName) {
+      if (!formData.fullName.trim()) { toast.error('El nombre es obligatorio'); return; }
+      payload.fullName = formData.fullName.trim();
+    }
+    if (canEditEmail) {
+      if (!formData.email.trim()) { toast.error('El correo es obligatorio'); return; }
+      payload.email = formData.email.trim();
     }
 
     setIsSavingInfo(true);
     try {
-      const { data } = await api.put('/auth/me', {
-        fullName: formData.fullName.trim(),
-        email: formData.email.trim(),
-      });
+      const { data } = await api.put('/auth/me', payload);
       if (token) setAuth(token, data);
       setIsEditingInfo(false);
       toast.success('Información actualizada con éxito');
@@ -140,14 +154,16 @@ export default function Profile() {
             </p>
 
             <div className="flex flex-wrap justify-center md:justify-start gap-3">
-              <button
-                onClick={() => setIsEditingInfo(true)}
-                title="Editar perfil"
-                aria-label="Editar perfil"
-                className="w-11 h-11 bg-white/10 hover:bg-white/20 border border-white/30 text-white rounded-xl transition-all flex items-center justify-center backdrop-blur-sm"
-              >
-                <Pencil size={18} />
-              </button>
+              {canEditInfo && (
+                <button
+                  onClick={() => setIsEditingInfo(true)}
+                  title="Editar perfil"
+                  aria-label="Editar perfil"
+                  className="w-11 h-11 bg-white/10 hover:bg-white/20 border border-white/30 text-white rounded-xl transition-all flex items-center justify-center backdrop-blur-sm"
+                >
+                  <Pencil size={18} />
+                </button>
+              )}
             </div>
           </div>
 
@@ -196,9 +212,9 @@ export default function Profile() {
               {/* Name */}
               <div className="group">
                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-                  Nombre Completo
+                  {isEmpresa ? 'Nombre de la empresa' : 'Nombre Completo'}
                 </label>
-                {isEditingInfo ? (
+                {isEditingInfo && canEditName ? (
                   <input
                     type="text"
                     value={formData.fullName}
@@ -206,9 +222,13 @@ export default function Profile() {
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/50 text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#2b7bf5] transition-all"
                   />
                 ) : (
-                  <div className="font-semibold text-lg text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800/50 px-4 py-2.5 rounded-xl border border-transparent">
+                  <div className={`font-semibold text-lg bg-slate-50 dark:bg-slate-800/50 px-4 py-2.5 rounded-xl border border-transparent flex items-center gap-2 ${isEmpresa ? 'text-slate-500 dark:text-slate-400 cursor-not-allowed' : 'text-slate-800 dark:text-slate-200'}`}>
+                    {isEmpresa && <Lock size={15} className="text-slate-400 shrink-0" />}
                     {user?.fullName}
                   </div>
+                )}
+                {isEmpresa && (
+                  <p className="text-[11px] text-slate-400 mt-1">El nombre de la empresa no se puede cambiar aquí. Contacta a la clínica.</p>
                 )}
               </div>
 
@@ -228,7 +248,7 @@ export default function Profile() {
               <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
                 Correo Electrónico
               </label>
-              {isEditingInfo ? (
+              {isEditingInfo && canEditEmail ? (
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                     <Mail size={18} className="text-slate-400" />
@@ -241,10 +261,14 @@ export default function Profile() {
                   />
                 </div>
               ) : (
-                <div className="flex items-center gap-3 font-semibold text-lg text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-slate-800/50 px-4 py-2.5 rounded-xl border border-transparent">
-                  <Mail size={18} className="text-[#2b7bf5]" />
+                <div className={`flex items-center gap-3 font-semibold text-lg bg-slate-50 dark:bg-slate-800/50 px-4 py-2.5 rounded-xl border border-transparent ${isPortal ? 'text-slate-500 dark:text-slate-400 cursor-not-allowed' : 'text-slate-800 dark:text-slate-200'}`}>
+                  <Mail size={18} className={isPortal ? 'text-slate-400' : 'text-[#2b7bf5]'} />
                   {user?.email || 'No especificado'}
+                  {isPortal && <Lock size={15} className="text-slate-400 shrink-0 ml-auto" />}
                 </div>
+              )}
+              {isPortal && (
+                <p className="text-[11px] text-slate-400 mt-1">Tu correo es tu acceso verificado y no se puede cambiar aquí. Si necesitas cambiarlo, contacta a la clínica.</p>
               )}
             </div>
 
