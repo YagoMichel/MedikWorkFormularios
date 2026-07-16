@@ -37,6 +37,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.nginx
+      # Variables VITE_* del frontend (se hornean al construir). Vienen del .env.prod.
+      args:
+        VITE_TURNSTILE_SITE_KEY: ${VITE_TURNSTILE_SITE_KEY:-}
+        VITE_INACTIVITY_MIN: ${VITE_INACTIVITY_MIN:-}
     container_name: mediwork2-nginx
     restart: unless-stopped
     depends_on:

@@ -3,6 +3,12 @@ WORKDIR /app
 COPY frontend/package*.json ./
 RUN npm install
 COPY frontend/ .
+# Variables VITE_* del frontend: se "hornean" en el build. Se pasan como build
+# args desde docker-compose.prod.yml (que las toma del .env.prod).
+ARG VITE_TURNSTILE_SITE_KEY
+ARG VITE_INACTIVITY_MIN
+ENV VITE_TURNSTILE_SITE_KEY=$VITE_TURNSTILE_SITE_KEY
+ENV VITE_INACTIVITY_MIN=$VITE_INACTIVITY_MIN
 RUN npm run build
 
 FROM nginx:alpine
