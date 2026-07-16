@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 
 import { useState, useEffect } from 'react';
 import { socket } from '../../services/socket';
+import FeedbackApproval from './FeedbackApproval';
 
 export default function DoctorDashboard() {
   const user = useAuth((s) => s.user);
@@ -222,7 +223,7 @@ export default function DoctorDashboard() {
 
           {/* Consejo de seguridad */}
           <div className="bg-white dark:bg-[#1a2332] rounded-3xl p-6 flex items-start gap-5 relative shadow-sm dark:shadow-none border border-slate-200 dark:border-slate-800/60">
-            <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-white/5 text-amber-500 dark:text-amber-400 flex shrink-0 items-center justify-center">
+            <div className="w-12 h-12 rounded-2xl bg-[#2560aa]/10 dark:bg-white/5 text-[#2560aa] dark:text-[#51abcd] flex shrink-0 items-center justify-center">
               <Shield size={24} />
             </div>
             <div className="pr-6">
@@ -281,6 +282,8 @@ export default function DoctorDashboard() {
       </div>
 
       {/* Modal de Actividad */}
+      <FeedbackApproval />
+
       {showActivityModal && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 fade-in">
           <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-md max-h-[80vh] flex flex-col">

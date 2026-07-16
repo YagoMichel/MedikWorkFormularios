@@ -54,6 +54,7 @@ import documents    from './routes/documents';
 import portal       from './routes/portal';
 import system       from './routes/system';
 import audit        from './routes/audit';
+import feedback     from './routes/feedback';
 
 const app = express();
 
@@ -285,6 +286,7 @@ app.use('/api/company-profiles', companyProfiles); // Perfiles/checklist de estu
 app.use('/api/batches',      batches);       // Citas de empresa
 app.use('/api/system',       system);        // Panel de estado (exclusivo MASTER)
 app.use('/api/audit',        audit);         // Bitácora de auditoría (ADMIN/MASTER)
+app.use('/api/feedback',     feedback);      // Testimonios y sugerencias web
 
 // -- Bot externo (WhatsApp u otro canal, desarrollado por 3er ingeniero) --
 // Auth: JWT con role AGENT — generar con: npm run agent:token
