@@ -1,3 +1,6 @@
+# Caddy (reverse proxy del host). El puerto debe COINCIDIR con WEB_PORT del
+# .env.prod (por defecto 7000). Cámbialo si otra app del servidor ya usa ese
+# puerto — ej. WEB_PORT=7300 en .env.prod y 7300 aquí.
 sistema.mediworkzac.com {
     reverse_proxy 127.0.0.1:7000
 }

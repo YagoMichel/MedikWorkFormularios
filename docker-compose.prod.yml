@@ -41,8 +41,12 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
+    # Único puerto publicado al host. El backend y la BD NO publican puerto (red interna).
+    #  - Detrás de un reverse proxy del host (Caddy/HTTPS):  WEB_HOST=127.0.0.1 (privado)
+    #  - Acceso directo por IP:puerto (sin dominio/HTTPS):    WEB_HOST=0.0.0.0  (público)
+    # WEB_PORT elige un puerto libre para no chocar con otras apps del servidor.
     ports:
-      - "127.0.0.1:7000:80"
+      - "${WEB_HOST:-127.0.0.1}:${WEB_PORT:-7000}:80"
 
 volumes:
   pgdata:
